@@ -3,7 +3,6 @@ import tkinter.messagebox
 import customtkinter
 from tkinter import colorchooser, filedialog
 from PIL import ImageGrab, Image
-from io import BytesIO
 import ctypes
 
 
