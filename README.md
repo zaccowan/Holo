@@ -37,6 +37,26 @@
 - Tkinter based GUI (custom tkinter for themeing)
 - Mediapipe hand tracking for gesture control
 
+# Holo Canvas App Dependencies
+- Tkinter
+  ```
+  pip install tk
+  ```
+- Custom Tkinter
+  ```
+  pip install customtkinter --upgrade
+  ```
+- Pillow
+  ```
+  pip install pillow
+  ```
+
+# Gesture Control Dependencies
+- OpenCV
+- Mediapipe
+- Numpy
+- 
+
 <br>
 <br>
 
