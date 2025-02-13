@@ -6,6 +6,7 @@ import customtkinter
 from tkinter import colorchooser, filedialog
 from PIL import ImageGrab, Image
 import ctypes
+import numpy as np
 
 
 customtkinter.set_appearance_mode(
@@ -18,10 +19,17 @@ customtkinter.set_default_color_theme(
 
 class Holo(customtkinter.CTk):
     mouse_down = False
-    hex_color = "black"
+    hex_color = "#000000"
     brush_size = 5
-    tool_dict = {0: "Circle Brush", 1: "Pen", 2: "Rectangle Tool", 3: "Fill Tool"}
+    tool_dict = {0: "Circle Brush", 1: "Rectangle Tool", 2: "Fill Tool"}
     active_tool = "Circle Brush"
+    mouse_active_coords = {
+        "previous": None,
+        "current": None,
+    }
+
+    mouse_down_canvas_coords = (0, 0)
+    mouse_release_canvas_coords = (0, 0)
 
     def __init__(self):
         super().__init__()
@@ -31,7 +39,7 @@ class Holo(customtkinter.CTk):
         self.geometry(f"{1280}x{720}")
         self.menu_bar = Menu(self)
 
-        file_menu = Menu(self.menu_bar, tearoff=0, background="black")
+        file_menu = Menu(self.menu_bar, tearoff=0)
         # add menu items to the File menu
         file_menu.add_command(label="New")
         file_menu.add_command(label="Open...")
@@ -43,15 +51,12 @@ class Holo(customtkinter.CTk):
 
         self.menu_bar.add_cascade(label="File", menu=file_menu, underline=0)
         self.configure(menu=self.menu_bar)
-        # self.holo_logo_webp = Image.open("./images/holo_logo.webp")
-        # self.holo_logo_webp.save("./images/holo_logo.png", "PNG")
 
         self.holo_logo = tkinter.PhotoImage(file="./images/holo_transparent_scaled.png")
         myappid = "tkinter.python.test"
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         self.wm_iconbitmap("./images/holo_transparent_scaled.png")
 
-        # holo_logo = PhotoImage.open(file="./images/holo_logo.webp")
         self.iconphoto(False, self.holo_logo)
 
         # configure grid layout (4x4)
@@ -85,7 +90,8 @@ class Holo(customtkinter.CTk):
         self.brush_color_btn.grid(row=1, column=0, padx=20, pady=(10, 10))
         self.color_label = customtkinter.CTkLabel(
             self.sidebar_frame,
-            text="Element Color: None",
+            text=f"Element Color: {self.hex_color}",
+            fg_color=self.hex_color,
             font=("Arial", 12),
             padx=20,
             pady=5,
@@ -95,7 +101,10 @@ class Holo(customtkinter.CTk):
         self.color_label.grid(row=2, column=0, rowspan=2, padx=20, pady=(5, 50))
 
         self.brush_size_label = customtkinter.CTkLabel(
-            self.sidebar_frame, text="Brush Size: 5", font=("Arial", 12), pady=10
+            self.sidebar_frame,
+            text=f"Brush Size: {self.brush_size}",
+            font=("Arial", 12),
+            pady=10,
         )
 
         self.brush_size_label.grid(row=3, column=0, padx=(20, 10), pady=(10, 0))
@@ -134,24 +143,16 @@ class Holo(customtkinter.CTk):
             master=self.radiobutton_frame,
             variable=self.radio_tool_var,
             value=1,
-            text="Pen",
+            text="Rectangle Tool",
         )
         self.radio_button_2.grid(row=2, column=0, pady=10, padx=20, sticky="nsew")
-
         self.radio_button_3 = customtkinter.CTkRadioButton(
             master=self.radiobutton_frame,
             variable=self.radio_tool_var,
             value=2,
-            text="Rectangle Tool",
-        )
-        self.radio_button_3.grid(row=3, column=0, pady=10, padx=20, sticky="nsew")
-        self.radio_button_4 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=3,
             text="Fill Tool",
         )
-        self.radio_button_4.grid(row=4, column=0, pady=10, padx=20, sticky="nsew")
+        self.radio_button_3.grid(row=3, column=0, pady=10, padx=20, sticky="nsew")
 
         self.appearance_mode_label = customtkinter.CTkLabel(
             self.sidebar_frame, text="Appearance Mode:", anchor="w"
@@ -183,7 +184,6 @@ class Holo(customtkinter.CTk):
         self.main_ribbon = tkinter.ttk.Notebook(self.main_frame)
 
         # create tabview
-        # self.grid_columnconfigure((1, 2), weight=1)
         self.tabview = customtkinter.CTkTabview(
             self.main_frame,
             bg_color="transparent",
@@ -196,9 +196,6 @@ class Holo(customtkinter.CTk):
         self.tabview.add("Genrated AI Image")
         self.tabview.add("Webcam Image")
 
-        # self.tabview.tab("Canvas").grid_columnconfigure(0, weight=1)
-        # self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
-
         self.canvas = customtkinter.CTkCanvas(
             self.tabview.tab("Canvas"),
             width=1280,
@@ -208,23 +205,18 @@ class Holo(customtkinter.CTk):
         self.tabview.tab("Canvas").grid_columnconfigure((0, 1, 2), weight=1)
         self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
         self.canvas.grid(row=0, column=0, columnspan=3)
-        # # self.canvas.pack(side="left", fill="both")
 
-        # # create canvas
-        # # self.canvas = customtkinter.CTkCanvas(self, width=1280, height=720, bg="white")
-        # self.grid_rowconfigure(0, weight=1)
-        # # self.grid_columnconfigure((1, 2), weight=1)
+        self.canvas.create_line(0, 0, 50, 50, width=40)
 
-        # self.canvas.bind("<Button-1>", self.canvas_mouse_down)
-        # self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
-        # self.canvas.bind("<Motion>", self.mouse_move)
+        self.canvas.bind("<Button-1>", self.canvas_mouse_down)
+        self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
+        self.canvas.bind("<Motion>", self.mouse_move)
 
         # ################################
         # ################################
         # # create main entry and button
         # ################################
         # ################################
-        # self.grid_columnconfigure(1, weight=1)
         self.prompt_entry = customtkinter.CTkEntry(
             self.tabview.tab("Canvas"),
             placeholder_text="Prompt to guide image generation...",
@@ -255,18 +247,6 @@ class Holo(customtkinter.CTk):
         self.save_canvas.grid(
             row=1, column=2, padx=(20, 20), pady=(20, 20), sticky="ew"
         )
-
-        # self.save_name_btn = customtkinter.CTkButton(
-        #     master=self,
-        #     fg_color="transparent",
-        #     border_width=2,
-        #     text="Save Drawing",
-        #     text_color=("gray10", "#DCE4EE"),
-        #     command=self.canvas_save_png,
-        # )
-        # self.save_name_btn.grid(
-        #     row=3, column=4, padx=(20, 20), pady=(20, 20), sticky="nsew"
-        # )
 
         # set default values
         self.appearance_mode_optionemenu.set("Dark")
@@ -305,15 +285,64 @@ class Holo(customtkinter.CTk):
 
     def mouse_move(self, event):
         if self.mouse_down:
-            self.canvas.create_aa_circle(
-                event.x, event.y, self.brush_size, 0, str(self.hex_color)
-            )
+            self.mouse_active_coords["previous"] = self.mouse_active_coords["current"]
+            self.mouse_active_coords["current"] = (event.x, event.y)
+            # print(self.mouse_active_coords)
+            if (
+                self.mouse_active_coords["previous"]
+                != self.mouse_active_coords["current"]
+                and self.mouse_active_coords["previous"] != None
+            ):
+                x_interp_float = np.linspace(
+                    self.mouse_active_coords["previous"][0],
+                    self.mouse_active_coords["current"][0],
+                    num=150 - self.brush_size,
+                )
+                y_interp_float = np.linspace(
+                    self.mouse_active_coords["previous"][1],
+                    self.mouse_active_coords["current"][1],
+                    num=150 - self.brush_size,
+                )
+                x_interp = [int(x) for x in x_interp_float]
+                y_interp = [int(y) for y in y_interp_float]
+                match self.active_tool:
+                    case "Circle Brush":
+                        for index, x in enumerate(x_interp):
+                            self.canvas.create_aa_circle(
+                                x,
+                                y_interp[index],
+                                self.brush_size,
+                                0,
+                                str(self.hex_color),
+                            )
+                    case "Rectangle Tool":
+                        self.canvas.create_aa_circle(
+                            event.x, event.y, self.brush_size, 0, str(self.hex_color)
+                        )
+                    case "Fill Tool":
+                        self.canvas.create_rectangle(
+                            0,
+                            0,
+                            self.canvas.winfo_width(),
+                            self.canvas.winfo_height(),
+                            fill=self.hex_color,
+                        )
+
+        # elif not self.mouse_down:
+        #     self.mouse_release_canvas_coords_canvas_coords = event.x, event.y
+        #     print("Mouse down:", self.mouse_release_canvas_coords)
 
     def canvas_mouse_down(self, event):
         self.mouse_down = True
+        print(self.mouse_down_canvas_coords)
 
     def canvas_mouse_release(self, event):
         self.mouse_down = False
+        self.mouse_active_coords["previous"] = None
+        self.mouse_active_coords["current"] = None
+
+        # self.mouse_release_canvas_coords_canvas_coords = event.x, event.y
+        # print("Mouse down:", self.mouse_release_canvas_coords)
 
     def tab_right_click(self, event):
         print("Right Click")
