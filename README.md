@@ -1,3 +1,5 @@
+<img src="./images/holo_logo.png" alt="Holo Logo - Generated with Dalle" width="200"/>
+
 # What is Holo?
   Holo is my Computer Engineering capstone project at Bellarmine University. It involves to major components:
   <br>
