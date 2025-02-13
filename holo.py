@@ -1,5 +1,7 @@
 import tkinter
+from tkinter import Menu
 import tkinter.messagebox
+import tkinter.ttk
 import customtkinter
 from tkinter import colorchooser, filedialog
 from PIL import ImageGrab, Image
@@ -24,7 +26,21 @@ class Holo(customtkinter.CTk):
 
         # configure window
         self.title("Holo")
-        self.geometry(f"{1100}x{580}")
+        self.geometry(f"{1280}x{720}")
+        self.menu_bar = Menu(self)
+
+        file_menu = Menu(self.menu_bar, tearoff=0, background="black")
+        # add menu items to the File menu
+        file_menu.add_command(label="New")
+        file_menu.add_command(label="Open...")
+        file_menu.add_command(label="Close")
+        file_menu.add_separator()
+
+        # add Exit menu item
+        file_menu.add_command(label="Exit", command=self.destroy)
+
+        self.menu_bar.add_cascade(label="File", menu=file_menu, underline=0)
+        self.configure(menu=self.menu_bar)
         # self.holo_logo_webp = Image.open("./images/holo_logo.webp")
         # self.holo_logo_webp.save("./images/holo_logo.png", "PNG")
 
@@ -112,31 +128,67 @@ class Holo(customtkinter.CTk):
         )
         self.scaling_optionemenu.grid(row=9, column=0, padx=20, pady=(10, 20))
 
-        # create canvas
-        self.canvas = customtkinter.CTkCanvas(self, width=1920, height=1080, bg="white")
-        self.grid_rowconfigure(2, weight=1)
-        self.grid_columnconfigure((2, 3, 4), weight=1)
-        self.canvas.grid(row=0, column=2, columnspan=3, rowspan=3)
-
-        self.canvas.bind("<Button-1>", self.canvas_mouse_down)
-        self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
-        self.canvas.bind("<Motion>", self.mouse_move)
-
-        ################################
-        ################################
-        # create main entry and button
-        ################################
-        ################################
-        self.grid_columnconfigure(1, weight=1)
-        self.name_entry = customtkinter.CTkEntry(
-            self, placeholder_text="Generate Image from sketck prompt"
+        # Main Frame
+        self.main_frame = customtkinter.CTkFrame(
+            self,
+            corner_radius=0,
         )
-        self.name_entry.grid(
-            row=3, column=1, columnspan=2, padx=(20, 0), pady=(20, 20), sticky="nsew"
+        self.main_frame.grid(row=0, rowspan=4, column=1, padx=0, pady=0, sticky="NSEW")
+        self.main_ribbon = tkinter.ttk.Notebook(self.main_frame)
+
+        # create tabview
+        # self.grid_columnconfigure((1, 2), weight=1)
+        self.tabview = customtkinter.CTkTabview(
+            self.main_frame,
+            bg_color="transparent",
+            fg_color="transparent",
+        )
+        self.main_frame.grid_columnconfigure(0, weight=1)
+        self.main_frame.grid_rowconfigure(0, weight=1)
+        self.tabview.grid(row=0, column=0, padx=(20, 20), pady=(10, 10), sticky="NSEW")
+        self.tabview.add("Canvas")
+        self.tabview.add("Genrated AI Image")
+        self.tabview.add("Webcam Image")
+
+        # self.tabview.tab("Canvas").grid_columnconfigure(0, weight=1)
+        # self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
+
+        self.canvas = customtkinter.CTkCanvas(
+            self.tabview.tab("Canvas"),
+            width=1280,
+            height=720,
+            bg="white",
+        )
+        self.tabview.tab("Canvas").grid_columnconfigure((0, 1, 2), weight=1)
+        self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
+        self.canvas.grid(row=0, column=0, columnspan=3)
+        # # self.canvas.pack(side="left", fill="both")
+
+        # # create canvas
+        # # self.canvas = customtkinter.CTkCanvas(self, width=1280, height=720, bg="white")
+        # self.grid_rowconfigure(0, weight=1)
+        # # self.grid_columnconfigure((1, 2), weight=1)
+
+        # self.canvas.bind("<Button-1>", self.canvas_mouse_down)
+        # self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
+        # self.canvas.bind("<Motion>", self.mouse_move)
+
+        # ################################
+        # ################################
+        # # create main entry and button
+        # ################################
+        # ################################
+        # self.grid_columnconfigure(1, weight=1)
+        self.prompt_entry = customtkinter.CTkEntry(
+            self.tabview.tab("Canvas"),
+            placeholder_text="Prompt to guide image generation...",
+        )
+        self.prompt_entry.grid(
+            row=1, column=0, padx=(20, 20), pady=(10, 10), sticky="ew"
         )
 
         self.generate_ai_image_btn = customtkinter.CTkButton(
-            master=self,
+            master=self.tabview.tab("Canvas"),
             fg_color="transparent",
             border_width=2,
             text="Generate AI Image",
@@ -144,20 +196,31 @@ class Holo(customtkinter.CTk):
             command=self.generate_ai_image,
         )
         self.generate_ai_image_btn.grid(
-            row=3, column=3, padx=(20, 20), pady=(20, 20), sticky="nsew"
+            row=1, column=1, padx=(20, 20), pady=(20, 20), sticky="ew"
         )
-
-        self.save_name_btn = customtkinter.CTkButton(
-            master=self,
+        self.save_canvas = customtkinter.CTkButton(
+            master=self.tabview.tab("Canvas"),
             fg_color="transparent",
             border_width=2,
             text="Save Drawing",
             text_color=("gray10", "#DCE4EE"),
             command=self.canvas_save_png,
         )
-        self.save_name_btn.grid(
-            row=3, column=4, padx=(20, 20), pady=(20, 20), sticky="nsew"
+        self.save_canvas.grid(
+            row=1, column=2, padx=(20, 20), pady=(20, 20), sticky="ew"
         )
+
+        # self.save_name_btn = customtkinter.CTkButton(
+        #     master=self,
+        #     fg_color="transparent",
+        #     border_width=2,
+        #     text="Save Drawing",
+        #     text_color=("gray10", "#DCE4EE"),
+        #     command=self.canvas_save_png,
+        # )
+        # self.save_name_btn.grid(
+        #     row=3, column=4, padx=(20, 20), pady=(20, 20), sticky="nsew"
+        # )
 
         # set default values
         self.appearance_mode_optionemenu.set("Dark")
@@ -201,6 +264,10 @@ class Holo(customtkinter.CTk):
 
     def canvas_mouse_release(self, event):
         self.mouse_down = False
+
+    def tab_right_click(self, event):
+        print("Right Click")
+        self.tabview.tab("Canvas").destroy()
 
     def generate_ai_image(self):
         pass
