@@ -20,6 +20,8 @@ class Holo(customtkinter.CTk):
     mouse_down = False
     hex_color = "black"
     brush_size = 5
+    tool_dict = {0: "Circle Brush", 1: "Pen", 2: "Rectangle Tool", 3: "Fill Tool"}
+    active_tool = "Circle Brush"
 
     def __init__(self):
         super().__init__()
@@ -105,7 +107,51 @@ class Holo(customtkinter.CTk):
             command=self.set_brush_size,
         )
         self.brush_size_slider.grid(row=4, column=0, padx=(20, 10), pady=(0, 10))
-        self.brush_size_slider
+
+        # create radiobutton frame
+        self.radiobutton_frame = customtkinter.CTkFrame(self.sidebar_frame)
+        self.radiobutton_frame.grid(
+            row=5, column=0, padx=(20, 20), pady=(20, 0), sticky="nsew"
+        )
+        self.radio_tool_var = tkinter.IntVar(value=0)
+        self.radio_tool_var.trace_add("write", callback=self.set_active_tool)
+        self.label_radio_group = customtkinter.CTkLabel(
+            master=self.radiobutton_frame, text="Select Tool:"
+        )
+        self.label_radio_group.grid(
+            row=0, column=0, columnspan=1, padx=10, pady=10, sticky="nsew"
+        )
+
+        self.radio_button_1 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=0,
+            text="Circle Brush",
+        )
+        self.radio_button_1.grid(row=1, column=0, pady=10, padx=20, sticky="nsew")
+
+        self.radio_button_2 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=1,
+            text="Pen",
+        )
+        self.radio_button_2.grid(row=2, column=0, pady=10, padx=20, sticky="nsew")
+
+        self.radio_button_3 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=2,
+            text="Rectangle Tool",
+        )
+        self.radio_button_3.grid(row=3, column=0, pady=10, padx=20, sticky="nsew")
+        self.radio_button_4 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=3,
+            text="Fill Tool",
+        )
+        self.radio_button_4.grid(row=4, column=0, pady=10, padx=20, sticky="nsew")
 
         self.appearance_mode_label = customtkinter.CTkLabel(
             self.sidebar_frame, text="Appearance Mode:", anchor="w"
@@ -252,6 +298,10 @@ class Holo(customtkinter.CTk):
     def set_brush_size(self, event):
         self.brush_size = int(self.brush_size_slider.get())
         self.brush_size_label.configure(text=f"Brush Size: {self.brush_size}")
+
+    def set_active_tool(self, *args):
+        self.active_tool = self.tool_dict.get(self.radio_tool_var.get())
+        print(self.active_tool)
 
     def mouse_move(self, event):
         if self.mouse_down:
