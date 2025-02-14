@@ -4,7 +4,7 @@ import tkinter.messagebox
 import tkinter.ttk
 import customtkinter
 from tkinter import colorchooser, filedialog
-from PIL import ImageGrab, Image
+from PIL import ImageGrab, Image, ImageTk
 import ctypes
 import numpy as np
 import cv2
@@ -204,6 +204,7 @@ class Holo(customtkinter.CTk):
         self.tabview.add("Genrated AI Image")
         self.tabview.add("Webcam Image")
 
+        # Canvas Tab
         self.canvas = customtkinter.CTkCanvas(
             self.tabview.tab("Canvas"),
             width=1280,
@@ -219,6 +220,29 @@ class Holo(customtkinter.CTk):
         self.canvas.bind("<Button-1>", self.canvas_mouse_down)
         self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
         self.canvas.bind("<Motion>", self.mouse_move)
+
+        # Generated AI Image Tab
+
+        # Webcam Tab
+        self.tabview.tab("Webcam Image").columnconfigure((0, 1), weight=1)
+        self.tabview.tab("Webcam Image").rowconfigure(0, weight=1)
+        self.webcam_image_label = customtkinter.CTkLabel(
+            self.tabview.tab("Webcam Image"), text="Webcam Image"
+        )
+        self.webcam_image_label.grid(row=0, column=0, columnspan=2)
+        self.open_camera_btn = customtkinter.CTkButton(
+            self.tabview.tab("Webcam Image"),
+            text="Open Camera",
+            command=self.open_camera,
+        )
+        self.open_camera_btn.grid(row=1, column=0)
+        self.close_camera_btn = customtkinter.CTkButton(
+            self.tabview.tab("Webcam Image"),
+            text="Close Camera",
+            state="disabled",
+            command=self.close_camera,
+        )
+        self.close_camera_btn.grid(row=1, column=1)
 
         # ################################
         # ################################
@@ -379,10 +403,23 @@ class Holo(customtkinter.CTk):
     def sidebar_button_event(self):
         print("sidebar_button click")
 
-    def open_camera():
+    def open_camera(self):
+
+        if self.cap.isOpened():
+            self.open_camera_btn.configure(state="disabled")
+            self.close_camera_btn.configure(state="normal")
+
+        if not self.cap.isOpened():
+            self.cap = cv2.VideoCapture(0)
+
+            cam_width, cam_height = 1280, 720
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_height)
+            self.open_camera
+            return
 
         # Capture the video frame by frame
-        _, frame = vid.read()
+        _, frame = self.cap.read()
 
         # Convert image from one color space to other
         opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
@@ -393,14 +430,29 @@ class Holo(customtkinter.CTk):
         # Convert captured image to photoimage
         photo_image = ImageTk.PhotoImage(image=captured_image)
 
+        self.webcam_image_label.configure(text="")
+
         # Displaying photoimage in the label
-        label_widget.photo_image = photo_image
+        self.webcam_image_label.photo_image = photo_image
 
         # Configure image in the label
-        label_widget.configure(image=photo_image)
+        self.webcam_image_label.configure(image=ImageTk.PhotoImage(captured_image))
 
         # Repeat the same process after every 10 seconds
-        label_widget.after(10, open_camera)
+        self.webcam_image_label.after(10, self.open_camera)
+
+    def close_camera(self):
+        self.open_camera_btn.configure(state="normal")
+        self.close_camera_btn.configure(state="disabled")
+        self.cap.release()
+        cv2.destroyAllWindows()
+        self.webcam_image_label.destroy()
+        self.webcam_image_label = customtkinter.CTkLabel(
+            self.tabview.tab("Webcam Image"), text="Webcam Image"
+        )
+        self.webcam_image_label.grid(row=0, column=0, columnspan=2)
+        self.webcam_image_label.configure(image=None)
+        self.webcam_image_label.configure(text="Webcam Image")
 
 
 if __name__ == "__main__":
