@@ -7,6 +7,7 @@ from tkinter import colorchooser, filedialog
 from PIL import ImageGrab, Image
 import ctypes
 import numpy as np
+import cv2
 
 
 customtkinter.set_appearance_mode(
@@ -31,12 +32,19 @@ class Holo(customtkinter.CTk):
     mouse_down_canvas_coords = (0, 0)
     mouse_release_canvas_coords = (0, 0)
 
+    cap = cv2.VideoCapture(0)
+
+    cam_width, cam_height = 1280, 720
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_height)
+
     def __init__(self):
         super().__init__()
 
         # configure window
         self.title("Holo")
         self.geometry(f"{1280}x{720}")
+        self.bind("<Escape>", lambda e: app.quit())
         self.menu_bar = Menu(self)
 
         file_menu = Menu(self.menu_bar, tearoff=0)
@@ -370,6 +378,29 @@ class Holo(customtkinter.CTk):
 
     def sidebar_button_event(self):
         print("sidebar_button click")
+
+    def open_camera():
+
+        # Capture the video frame by frame
+        _, frame = vid.read()
+
+        # Convert image from one color space to other
+        opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+
+        # Capture the latest frame and transform to image
+        captured_image = Image.fromarray(opencv_image)
+
+        # Convert captured image to photoimage
+        photo_image = ImageTk.PhotoImage(image=captured_image)
+
+        # Displaying photoimage in the label
+        label_widget.photo_image = photo_image
+
+        # Configure image in the label
+        label_widget.configure(image=photo_image)
+
+        # Repeat the same process after every 10 seconds
+        label_widget.after(10, open_camera)
 
 
 if __name__ == "__main__":
