@@ -29,6 +29,8 @@ class Holo(customtkinter.CTk):
         "current": None,
     }
 
+    stroke_counter = 0
+
     mouse_down_canvas_coords = (0, 0)
     mouse_release_canvas_coords = (0, 0)
 
@@ -215,8 +217,9 @@ class Holo(customtkinter.CTk):
         self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
         self.canvas.grid(row=0, column=0, columnspan=3)
 
-        self.canvas.create_line(0, 0, 50, 50, width=40)
-
+        # self.canvas.bind("<ButtonPress-3>", self.scroll_start)
+        # self.canvas.bind("<B3-Motion>", self.scroll_move)
+        self.canvas.bind("<ButtonRelease-3>", self.scroll_end)
         self.canvas.bind("<Button-1>", self.canvas_mouse_down)
         self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
         self.canvas.bind("<Motion>", self.mouse_move)
@@ -316,6 +319,7 @@ class Holo(customtkinter.CTk):
         print(self.active_tool)
 
     def mouse_move(self, event):
+
         if self.mouse_down:
             self.mouse_active_coords["previous"] = self.mouse_active_coords["current"]
             self.mouse_active_coords["current"] = (event.x, event.y)
@@ -337,6 +341,7 @@ class Holo(customtkinter.CTk):
                 )
                 x_interp = [int(x) for x in x_interp_float]
                 y_interp = [int(y) for y in y_interp_float]
+
                 match self.active_tool:
                     case "Circle Brush":
                         for index, x in enumerate(x_interp):
@@ -346,35 +351,66 @@ class Holo(customtkinter.CTk):
                                 self.brush_size,
                                 0,
                                 str(self.hex_color),
+                                tags="brush_stroke" + str(self.stroke_counter),
                             )
                     case "Rectangle Tool":
-                        self.canvas.create_aa_circle(
-                            event.x, event.y, self.brush_size, 0, str(self.hex_color)
-                        )
-                    case "Fill Tool":
-                        self.canvas.create_rectangle(
-                            0,
-                            0,
-                            self.canvas.winfo_width(),
-                            self.canvas.winfo_height(),
-                            fill=self.hex_color,
-                        )
 
-        # elif not self.mouse_down:
-        #     self.mouse_release_canvas_coords_canvas_coords = event.x, event.y
-        #     print("Mouse down:", self.mouse_release_canvas_coords)
+                        self.temp_rect = None
+                        if self.mouse_down:
+                            self.canvas.delete("temp_rect")
+                            self.temp_rect = self.canvas.create_rectangle(
+                                self.mouse_down_canvas_coords[0],
+                                self.mouse_down_canvas_coords[1],
+                                event.x,
+                                event.y,
+                                width=self.brush_size,
+                                fill=str(self.hex_color),
+                                tags="temp_rect",
+                            )
 
     def canvas_mouse_down(self, event):
+        self.stroke_counter += 1
         self.mouse_down = True
-        print(self.mouse_down_canvas_coords)
+        self.mouse_down_canvas_coords = (event.x, event.y)
+        match self.active_tool:
+            case "Fill Tool":
+                self.canvas.create_rectangle(
+                    0,
+                    0,
+                    self.canvas.winfo_width(),
+                    self.canvas.winfo_height(),
+                    fill=self.hex_color,
+                )
+        print("Mouse Down:", self.mouse_down_canvas_coords)
 
     def canvas_mouse_release(self, event):
         self.mouse_down = False
         self.mouse_active_coords["previous"] = None
         self.mouse_active_coords["current"] = None
+        self.mouse_release_canvas_coords = (event.x, event.y)
 
-        # self.mouse_release_canvas_coords_canvas_coords = event.x, event.y
-        # print("Mouse down:", self.mouse_release_canvas_coords)
+        match self.active_tool:
+            case "Rectangle Tool":
+                self.canvas.delete("temp_rect")
+                self.canvas.create_rectangle(
+                    self.mouse_down_canvas_coords[0],
+                    self.mouse_down_canvas_coords[1],
+                    self.mouse_release_canvas_coords[0],
+                    self.mouse_release_canvas_coords[1],
+                    width=self.brush_size,
+                    fill=str(self.hex_color),
+                    outline=str(self.hex_color),
+                )
+        print("Mouse Release:", self.mouse_release_canvas_coords)
+
+    def scroll_start(self, event):
+        self.canvas.scan_mark(event.x, event.y)
+
+    def scroll_move(self, event):
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+
+    def scroll_end(self, event):
+        self.canvas.scan_dragto
 
     def tab_right_click(self, event):
         print("Right Click")
@@ -416,7 +452,6 @@ class Holo(customtkinter.CTk):
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_height)
             self.open_camera
-            return
 
         # Capture the video frame by frame
         _, frame = self.cap.read()
