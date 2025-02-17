@@ -9,6 +9,17 @@ import ctypes
 import numpy as np
 import cv2
 
+import argparse
+import sys
+import sched, time
+import math
+import pyautogui
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from mediapipe.framework.formats import landmark_pb2
+import threading
+
 
 customtkinter.set_appearance_mode(
     "System"
@@ -33,12 +44,6 @@ class Holo(customtkinter.CTk):
 
     mouse_down_canvas_coords = (0, 0)
     mouse_release_canvas_coords = (0, 0)
-
-    cap = cv2.VideoCapture(0)
-
-    cam_width, cam_height = 1280, 720
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_height)
 
     def __init__(self):
         super().__init__()
@@ -437,6 +442,28 @@ class Holo(customtkinter.CTk):
     def sidebar_button_event(self):
         print("sidebar_button click")
 
+    ################################
+    # Capture Functions and Variables
+    ################################
+    mp_hands = mp.solutions.hands
+    mp_drawing = mp.solutions.drawing_utils
+    mp_drawing_styles = mp.solutions.drawing_styles
+
+    hands = mp_hands.Hands(
+        static_image_mode=False,
+        max_num_hands=1,
+        min_detection_confidence=0.7,
+        min_tracking_confidence=0.7,
+    )
+
+    cap = cv2.VideoCapture(0)
+    frame_width, frame_height = 1280, 720
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+
+    def getPixelPos(self, floatCoord, frameDim):
+        return floatCoord * frameDim
+
     def open_camera(self):
 
         if self.cap.isOpened():
@@ -446,16 +473,72 @@ class Holo(customtkinter.CTk):
         if not self.cap.isOpened():
             self.cap = cv2.VideoCapture(0)
 
-            cam_width, cam_height = 1280, 720
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_height)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
             self.open_camera
 
         # Capture the video frame by frame
         _, frame = self.cap.read()
 
+        frame = cv2.flip(frame, 1)
+
         # Convert image from one color space to other
-        opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        results = self.hands.process(opencv_image)
+
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                # print(hand_landmarks.landmark[0])
+
+                index_tip_landmark = hand_landmarks.landmark[
+                    self.mp_hands.HandLandmark.INDEX_FINGER_TIP
+                ]
+                thumb_tip_landmark = hand_landmarks.landmark[
+                    self.mp_hands.HandLandmark.THUMB_TIP
+                ]
+
+                distance = math.hypot(
+                    index_tip_landmark.x - thumb_tip_landmark.x,
+                    index_tip_landmark.y - thumb_tip_landmark.y,
+                )
+
+                cv2.putText(
+                    opencv_image,
+                    "Distance: " + str(distance)[:6],
+                    (30, 50),
+                    1,
+                    2,
+                    (255, 255, 100),
+                    2,
+                )
+
+                # Click detection (adjust threshold as needed)
+                if distance < 0.05:
+                    current_click = True
+
+                cv2.circle(
+                    opencv_image,
+                    (
+                        int(
+                            self.getPixelPos(index_tip_landmark.x, self.frame_width)
+                            - 10
+                        ),
+                        int(
+                            self.getPixelPos(index_tip_landmark.y, self.frame_height)
+                            - 10
+                        ),
+                    ),
+                    10,
+                    (0, 0, 255),
+                    -1,
+                )
+
+                # Draw hand landmarks (optional)
+                self.mp_drawing.draw_landmarks(
+                    opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
+                )
+                break
 
         # Capture the latest frame and transform to image
         captured_image = Image.fromarray(opencv_image)
