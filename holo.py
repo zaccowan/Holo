@@ -217,8 +217,6 @@ class Holo(customtkinter.CTk):
         self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
         self.canvas.grid(row=0, column=0, columnspan=3)
 
-        # self.canvas.bind("<ButtonPress-3>", self.scroll_start)
-        # self.canvas.bind("<B3-Motion>", self.scroll_move)
         self.canvas.bind("<ButtonRelease-3>", self.scroll_end)
         self.canvas.bind("<Button-1>", self.canvas_mouse_down)
         self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
