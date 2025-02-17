@@ -1,3 +1,4 @@
+import os
 import tkinter
 from tkinter import Menu
 import tkinter.messagebox
@@ -45,6 +46,22 @@ class Holo(customtkinter.CTk):
     mouse_down_canvas_coords = (0, 0)
     mouse_release_canvas_coords = (0, 0)
 
+    mp_hands = mp.solutions.hands
+    mp_drawing = mp.solutions.drawing_utils
+    mp_drawing_styles = mp.solutions.drawing_styles
+
+    hands = mp_hands.Hands(
+        static_image_mode=False,
+        max_num_hands=1,
+        min_detection_confidence=0.7,
+        min_tracking_confidence=0.7,
+    )
+
+    cap = cv2.VideoCapture(0)
+    frame_width, frame_height = 1280, 720
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+
     def __init__(self):
         super().__init__()
 
@@ -71,7 +88,6 @@ class Holo(customtkinter.CTk):
         myappid = "tkinter.python.test"
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         self.wm_iconbitmap("./images/holo_transparent_scaled.png")
-
         self.iconphoto(False, self.holo_logo)
 
         # configure grid layout (4x4)
@@ -393,6 +409,15 @@ class Holo(customtkinter.CTk):
         self.mouse_release_canvas_coords = (event.x, event.y)
 
         match self.active_tool:
+            case "Circle Brush":
+                self.canvas.create_aa_circle(
+                    event.x,
+                    event.y,
+                    self.brush_size,
+                    0,
+                    str(self.hex_color),
+                    tags="brush_stroke" + str(self.stroke_counter),
+                )
             case "Rectangle Tool":
                 self.canvas.delete("temp_rect")
                 self.canvas.create_rectangle(
@@ -445,21 +470,6 @@ class Holo(customtkinter.CTk):
     ################################
     # Capture Functions and Variables
     ################################
-    mp_hands = mp.solutions.hands
-    mp_drawing = mp.solutions.drawing_utils
-    mp_drawing_styles = mp.solutions.drawing_styles
-
-    hands = mp_hands.Hands(
-        static_image_mode=False,
-        max_num_hands=1,
-        min_detection_confidence=0.7,
-        min_tracking_confidence=0.7,
-    )
-
-    cap = cv2.VideoCapture(0)
-    frame_width, frame_height = 1280, 720
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
 
     def getPixelPos(self, floatCoord, frameDim):
         return floatCoord * frameDim
