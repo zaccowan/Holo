@@ -171,7 +171,13 @@ class Holo(customtkinter.CTk):
     mouse_down = False
     hex_color = "#000000"
     element_size = 5
-    tool_dict = {0: "Circle Brush", 1: "Rectangle Tool", 2: "Fill Tool", 3: "Text Tool"}
+    tool_dict = {
+        0: "Circle Brush",
+        1: "Rectangle Tool",
+        2: "Fill Tool",
+        3: "Text Tool",
+        4: "Transform Tool",
+    }
     active_tool = "Circle Brush"
     mouse_active_coords = {
         "previous": None,
@@ -179,6 +185,9 @@ class Holo(customtkinter.CTk):
     }
 
     stroke_counter = 0
+
+    transform_active = False
+    transform_tags = []
 
     mouse_down_canvas_coords = (0, 0)
     mouse_release_canvas_coords = (0, 0)
@@ -320,6 +329,13 @@ class Holo(customtkinter.CTk):
             text="Text Tool",
         )
         self.radio_button_4.grid(row=4, column=0, pady=10, padx=20, sticky="nsew")
+        self.radio_button_5 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=4,
+            text="Transform Tool",
+        )
+        self.radio_button_5.grid(row=5, column=0, pady=10, padx=20, sticky="nsew")
 
         self.appearance_mode_label = customtkinter.CTkLabel(
             self.sidebar_frame, text="Appearance Mode:", anchor="w"
@@ -483,6 +499,8 @@ class Holo(customtkinter.CTk):
                 self.canvas.configure(cursor="spraycan")
             case "Text Tool":
                 self.canvas.configure(cursor="xterm")
+            case "Transform Tool":
+                self.canvas.configure(cursor="fleur")
         print(self.active_tool)
 
     def open_text_entry_window(self):
@@ -545,7 +563,6 @@ class Holo(customtkinter.CTk):
                                 tags="brush_stroke" + str(self.stroke_counter),
                             )
                     case "Rectangle Tool":
-
                         self.temp_rect = None
                         if self.mouse_down:
                             self.canvas.delete("temp_rect")
@@ -558,9 +575,13 @@ class Holo(customtkinter.CTk):
                                 fill=str(self.hex_color),
                                 tags="temp_rect",
                             )
+                    case "Transform Tool":
+                        for tag in self.transform_tags:
+                            self.canvas.moveto(tag, event.x, event.y)
 
     def canvas_mouse_down(self, event):
-        self.stroke_counter += 1
+        if self.active_tool != "Transform Tool":
+            self.stroke_counter += 1
         self.mouse_down = True
         self.mouse_down_canvas_coords = (event.x, event.y)
         match self.active_tool:
@@ -572,6 +593,15 @@ class Holo(customtkinter.CTk):
                     self.canvas.winfo_height(),
                     fill=self.hex_color,
                 )
+            case "Transform Tool":
+                if self.transform_active:
+                    self.transform_active = False
+                    self.transform_tags.clear()
+                else:
+                    self.transform_active = True
+                    item = self.canvas.find_closest(event.x, event.y)[0]
+                    tag = self.canvas.gettags(item)
+                    self.transform_tags.append(tag[0])
         print("Mouse Down:", self.mouse_down_canvas_coords)
 
     def canvas_mouse_release(self, event):
