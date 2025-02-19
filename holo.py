@@ -1,6 +1,5 @@
 import os
 import tkinter
-from tkinter import Menu
 import tkinter.messagebox
 import tkinter.ttk
 import customtkinter
@@ -10,16 +9,14 @@ import ctypes
 import numpy as np
 import cv2
 
-import argparse
-import sys
-import sched, time
 import math
 import pyautogui
 import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
-from mediapipe.framework.formats import landmark_pb2
 import threading
+
+import vosk
+import pyaudio
+import json
 
 
 customtkinter.set_appearance_mode(
@@ -30,11 +27,145 @@ customtkinter.set_default_color_theme(
 )  # Themes: "blue" (standard), "green", "dark-blue"
 
 
+class TextEntryWindow(customtkinter.CTkToplevel):
+
+    do_stop_speech = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.geometry("720x720")
+        self.title("Text Entry Window")
+        self.attributes("-topmost", True)
+        self.attributes("-toolwindow", "True")
+
+        self.label = customtkinter.CTkLabel(
+            self,
+            text="Type to enter text or use Speech Recognition",
+            font=customtkinter.CTkFont(size=32),
+        )
+        self.text_entry = customtkinter.CTkTextbox(self)
+
+        self.start_speech_rec_button = customtkinter.CTkButton(
+            self,
+            text="Start Speech Recognition",
+            fg_color="#FF0000",
+            hover_color="#770000",
+            cursor="star",
+            command=self.start_speech_rec,
+        )
+        self.submit_button = customtkinter.CTkButton(
+            self, text="Submit Text", command=self.set_text_from_entry
+        )
+
+        self.label.pack(padx=20, pady=20)
+        self.text_entry.pack(padx=20, pady=20, expand=True, fill="both")
+        self.start_speech_rec_button.pack(padx=20, pady=20, expand=True, fill="both")
+        self.submit_button.pack(padx=20, pady=20, expand=False, fill="x")
+
+    def start_speech_rec(self):
+        self.label.destroy()
+        self.text_entry.destroy()
+        self.start_speech_rec_button.destroy()
+        self.submit_button.destroy()
+        self.speech_rec_state_label = customtkinter.CTkLabel(
+            self,
+            text="Speech Recognition Active",
+            text_color="#0000FF",
+            font=customtkinter.CTkFont(size=32),
+        )
+        self.stop_speech_rec_button = customtkinter.CTkButton(
+            self,
+            text="Stop Speech Recognition",
+            fg_color="#FF0000",
+            hover_color="#770000",
+            cursor="star",
+            command=self.stop_speech_rec,
+        )
+        self.speech_rec_state_label.pack(padx=20, pady=20)
+        self.stop_speech_rec_button.pack(padx=20, pady=20, expand=True, fill="x")
+
+        speech_recognition_thread = threading.Thread(target=self.recognize_speech)
+        speech_recognition_thread.start()
+
+    def stop_speech_rec(self):
+        self.do_stop_speech = True
+        self.stop_speech_rec_button.destroy()
+
+    def recognize_speech(self):
+
+        speech_model_path = "vosk-model-small-en-us-0.15"
+        speech_model = vosk.Model(speech_model_path)
+        rec = vosk.KaldiRecognizer(speech_model, 16000)
+
+        # Open the microphone stream
+        p = pyaudio.PyAudio()
+        stream = p.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=16000,
+            input=True,
+            frames_per_buffer=8192,
+        )
+
+        # Specify the path for the output text file
+        output_file_path = "recognized_text.txt"
+
+        # Open a text file in write mode using a 'with' block
+        with open(output_file_path, "w") as output_file:
+            print("Listening for speech. Say 'Terminate' to stop.")
+            # Start streaming and recognize speech
+            while True:
+                data = stream.read(4096)  # read in chunks of 4096 bytes
+                if rec.AcceptWaveform(data):  # accept waveform of input voice
+                    # Parse the JSON result and get the recognized text
+                    result = json.loads(rec.Result())
+                    recognized_text = result["text"]
+                    # Check for the termination keyword
+                    if (
+                        "terminate" in recognized_text.lower()
+                        or self.do_stop_speech
+                        or not self.winfo_exists()
+                    ):
+                        print("Termination keyword detected. Stopping...")
+                        break
+
+                    # Write recognized text to the file
+                    output_file.write(recognized_text + "\n")
+                    # print(recognized_text)
+
+        # Stop and close the stream
+        stream.stop_stream()
+        stream.close()
+        # Terminate the PyAudio object
+        p.terminate()
+
+        with open(output_file_path, "r") as output_file:
+            self.set_text_from_speech(output_file.read())
+
+        if os.path.exists(output_file_path):
+            os.remove(output_file_path)
+        else:
+            print("The file does not exist")
+
+    def set_text_from_entry(self):
+        self.text = self.text_entry.get("0.0", "end")
+        app.set_canvas_text(self.text)
+        self.destroy()
+
+    def set_text_from_speech(self, recognized_text):
+        self.text = recognized_text
+        app.set_canvas_text(self.text)
+        self.destroy()
+
+    def get_text(self):
+        return self.text
+
+
 class Holo(customtkinter.CTk):
     mouse_down = False
     hex_color = "#000000"
     brush_size = 5
-    tool_dict = {0: "Circle Brush", 1: "Rectangle Tool", 2: "Fill Tool"}
+    tool_dict = {0: "Circle Brush", 1: "Rectangle Tool", 2: "Fill Tool", 3: "Text Tool"}
     active_tool = "Circle Brush"
     mouse_active_coords = {
         "previous": None,
@@ -57,6 +188,8 @@ class Holo(customtkinter.CTk):
         min_tracking_confidence=0.7,
     )
 
+    canvas_text = None
+
     cap = cv2.VideoCapture(0)
     frame_width, frame_height = 1280, 720
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
@@ -69,23 +202,11 @@ class Holo(customtkinter.CTk):
         self.title("Holo")
         self.geometry(f"{1280}x{720}")
         self.bind("<Escape>", lambda e: app.quit())
-        self.menu_bar = Menu(self)
 
-        file_menu = Menu(self.menu_bar, tearoff=0)
-        # add menu items to the File menu
-        file_menu.add_command(label="New")
-        file_menu.add_command(label="Open...")
-        file_menu.add_command(label="Close")
-        file_menu.add_separator()
-
-        # add Exit menu item
-        file_menu.add_command(label="Exit", command=self.destroy)
-
-        self.menu_bar.add_cascade(label="File", menu=file_menu, underline=0)
-        self.configure(menu=self.menu_bar)
+        self.toplevel_window = None
 
         self.holo_logo = tkinter.PhotoImage(file="./images/holo_transparent_scaled.png")
-        myappid = "tkinter.python.test"
+        myappid = "Holo"
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         self.wm_iconbitmap("./images/holo_transparent_scaled.png")
         self.iconphoto(False, self.holo_logo)
@@ -113,12 +234,6 @@ class Holo(customtkinter.CTk):
 
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
-        self.brush_color_btn = customtkinter.CTkButton(
-            self.sidebar_frame,
-            text="Edit Element Color",
-            command=self.choose_color_btn,
-        )
-        self.brush_color_btn.grid(row=1, column=0, padx=20, pady=(10, 10))
         self.color_label = customtkinter.CTkLabel(
             self.sidebar_frame,
             text=f"Element Color: {self.hex_color}",
@@ -127,8 +242,9 @@ class Holo(customtkinter.CTk):
             padx=20,
             pady=5,
             corner_radius=5,
+            cursor="hand2",
         )
-        self.color_label.bind("<Button-1>", self.choose_color_label)
+        self.color_label.bind("<Button-1>", self.choose_color)
         self.color_label.grid(row=2, column=0, rowspan=2, padx=20, pady=(5, 50))
 
         self.brush_size_label = customtkinter.CTkLabel(
@@ -138,13 +254,20 @@ class Holo(customtkinter.CTk):
             pady=10,
         )
 
-        self.brush_size_label.grid(row=3, column=0, padx=(20, 10), pady=(10, 0))
+        self.brush_size_label.grid(
+            row=3,
+            column=0,
+            padx=(20, 10),
+            pady=(10, 0),
+            sticky="nsw",
+        )
         self.brush_size_slider = customtkinter.CTkSlider(
             self.sidebar_frame,
             from_=1,
             to=100,
             number_of_steps=100,
             command=self.set_brush_size,
+            progress_color="#4477AA",
         )
         self.brush_size_slider.grid(row=4, column=0, padx=(20, 10), pady=(0, 10))
 
@@ -184,6 +307,13 @@ class Holo(customtkinter.CTk):
             text="Fill Tool",
         )
         self.radio_button_3.grid(row=3, column=0, pady=10, padx=20, sticky="nsew")
+        self.radio_button_4 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=3,
+            text="Text Tool",
+        )
+        self.radio_button_4.grid(row=4, column=0, pady=10, padx=20, sticky="nsew")
 
         self.appearance_mode_label = customtkinter.CTkLabel(
             self.sidebar_frame, text="Appearance Mode:", anchor="w"
@@ -233,12 +363,13 @@ class Holo(customtkinter.CTk):
             width=1280,
             height=720,
             bg="white",
+            cursor="circle",
         )
+
         self.tabview.tab("Canvas").grid_columnconfigure((0, 1, 2), weight=1)
         self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
         self.canvas.grid(row=0, column=0, columnspan=3)
 
-        self.canvas.bind("<ButtonRelease-3>", self.scroll_end)
         self.canvas.bind("<Button-1>", self.canvas_mouse_down)
         self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
         self.canvas.bind("<Motion>", self.mouse_move)
@@ -306,6 +437,12 @@ class Holo(customtkinter.CTk):
         self.appearance_mode_optionemenu.set("Dark")
         self.scaling_optionemenu.set("100%")
 
+    ########################################################################################################################################################
+    ########################################################################################################################################################
+    # End of init ##########################################################################################################################################
+    ########################################################################################################################################################
+    ########################################################################################################################################################
+
     def change_appearance_mode_event(self, new_appearance_mode: str):
         customtkinter.set_appearance_mode(new_appearance_mode)
 
@@ -313,15 +450,11 @@ class Holo(customtkinter.CTk):
         new_scaling_float = int(new_scaling.replace("%", "")) / 100
         customtkinter.set_widget_scaling(new_scaling_float)
 
-    def choose_color_btn(self):
-        self.color_code = colorchooser.askcolor(title="Choose color")
-        if self.color_code:
-            self.hex_color = self.color_code[1]
-            self.color_label.configure(
-                text=f"Element Color: {self.hex_color}", fg_color=self.hex_color
-            )
+    ################################
+    # Toolbar Functions
+    ################################
 
-    def choose_color_label(self, event):
+    def choose_color(self, event):
         self.color_code = colorchooser.askcolor(title="Choose color")
         if self.color_code:
             self.hex_color = self.color_code[1]
@@ -335,8 +468,40 @@ class Holo(customtkinter.CTk):
 
     def set_active_tool(self, *args):
         self.active_tool = self.tool_dict.get(self.radio_tool_var.get())
+        match self.active_tool:
+            case "Circle Brush":
+                self.canvas.configure(cursor="circle")
+            case "Rectangle Tool":
+                self.canvas.configure(cursor="tcross")
+            case "Fill Tool":
+                self.canvas.configure(cursor="spraycan")
+            case "Text Tool":
+                self.canvas.configure(cursor="xterm")
         print(self.active_tool)
 
+    def open_text_entry_window(self):
+        if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
+            self.toplevel_window = TextEntryWindow(
+                self
+            )  # create window if its None or destroyed
+        else:
+            self.toplevel_window.focus()  # if window exists focus it
+
+        if self.canvas_text is not None:
+            print(self.canvas_text)
+
+    def set_canvas_text(self, entry_text):
+        self.canvas_text = entry_text
+        self.canvas.create_text(
+            self.mouse_release_canvas_coords[0],
+            self.mouse_release_canvas_coords[1],
+            text=entry_text,
+        )
+        print(self.canvas_text)
+
+    ################################
+    # Canvas Mouse Events
+    ################################
     def mouse_move(self, event):
 
         if self.mouse_down:
@@ -429,21 +594,13 @@ class Holo(customtkinter.CTk):
                     fill=str(self.hex_color),
                     outline=str(self.hex_color),
                 )
+            case "Text Tool":
+                self.open_text_entry_window()
         print("Mouse Release:", self.mouse_release_canvas_coords)
 
-    def scroll_start(self, event):
-        self.canvas.scan_mark(event.x, event.y)
-
-    def scroll_move(self, event):
-        self.canvas.scan_dragto(event.x, event.y, gain=1)
-
-    def scroll_end(self, event):
-        self.canvas.scan_dragto
-
-    def tab_right_click(self, event):
-        print("Right Click")
-        self.tabview.tab("Canvas").destroy()
-
+    ################################
+    # Canvas Saving and AI Generation
+    ################################
     def generate_ai_image(self):
         pass
 
@@ -468,11 +625,8 @@ class Holo(customtkinter.CTk):
         print("sidebar_button click")
 
     ################################
-    # Capture Functions and Variables
+    # Webcam Functions
     ################################
-
-    def getPixelPos(self, floatCoord, frameDim):
-        return floatCoord * frameDim
 
     def open_camera(self):
 
@@ -579,6 +733,12 @@ class Holo(customtkinter.CTk):
         self.webcam_image_label.grid(row=0, column=0, columnspan=2)
         self.webcam_image_label.configure(image=None)
         self.webcam_image_label.configure(text="Webcam Image")
+
+    ################################
+    # Helper functions
+    ################################
+    def getPixelPos(self, floatCoord, frameDim):
+        return floatCoord * frameDim
 
 
 if __name__ == "__main__":
