@@ -61,6 +61,9 @@ class TextEntryWindow(customtkinter.CTkToplevel):
         self.text_entry.pack(padx=20, pady=20, expand=True, fill="both")
         self.start_speech_rec_button.pack(padx=20, pady=20, expand=True, fill="both")
         self.submit_button.pack(padx=20, pady=20, expand=False, fill="x")
+        self.text_entry.focus()
+
+        self.text_entry.bind("<Return>", command=self.submit_text)
 
     def start_speech_rec(self):
         self.label.destroy()
@@ -152,6 +155,9 @@ class TextEntryWindow(customtkinter.CTkToplevel):
         app.set_canvas_text(self.text)
         self.destroy()
 
+    def submit_text(self, event):
+        self.set_text_from_entry()
+
     def set_text_from_speech(self, recognized_text):
         self.text = recognized_text
         app.set_canvas_text(self.text)
@@ -164,7 +170,7 @@ class TextEntryWindow(customtkinter.CTkToplevel):
 class Holo(customtkinter.CTk):
     mouse_down = False
     hex_color = "#000000"
-    brush_size = 5
+    element_size = 5
     tool_dict = {0: "Circle Brush", 1: "Rectangle Tool", 2: "Fill Tool", 3: "Text Tool"}
     active_tool = "Circle Brush"
     mouse_active_coords = {
@@ -247,29 +253,29 @@ class Holo(customtkinter.CTk):
         self.color_label.bind("<Button-1>", self.choose_color)
         self.color_label.grid(row=2, column=0, rowspan=2, padx=20, pady=(5, 50))
 
-        self.brush_size_label = customtkinter.CTkLabel(
+        self.element_size_label = customtkinter.CTkLabel(
             self.sidebar_frame,
-            text=f"Brush Size: {self.brush_size}",
+            text=f"Element Size: {self.element_size}",
             font=("Arial", 12),
             pady=10,
         )
 
-        self.brush_size_label.grid(
+        self.element_size_label.grid(
             row=3,
             column=0,
             padx=(20, 10),
             pady=(10, 0),
             sticky="nsw",
         )
-        self.brush_size_slider = customtkinter.CTkSlider(
+        self.element_size_slider = customtkinter.CTkSlider(
             self.sidebar_frame,
             from_=1,
             to=100,
             number_of_steps=100,
-            command=self.set_brush_size,
+            command=self.set_element_size,
             progress_color="#4477AA",
         )
-        self.brush_size_slider.grid(row=4, column=0, padx=(20, 10), pady=(0, 10))
+        self.element_size_slider.grid(row=4, column=0, padx=(20, 10), pady=(0, 10))
 
         # create radiobutton frame
         self.radiobutton_frame = customtkinter.CTkFrame(self.sidebar_frame)
@@ -462,9 +468,9 @@ class Holo(customtkinter.CTk):
                 text=f"Element Color: {self.hex_color}", fg_color=self.hex_color
             )
 
-    def set_brush_size(self, event):
-        self.brush_size = int(self.brush_size_slider.get())
-        self.brush_size_label.configure(text=f"Brush Size: {self.brush_size}")
+    def set_element_size(self, event):
+        self.element_size = int(self.element_size_slider.get())
+        self.element_size_label.configure(text=f"Element Size: {self.element_size}")
 
     def set_active_tool(self, *args):
         self.active_tool = self.tool_dict.get(self.radio_tool_var.get())
@@ -496,6 +502,7 @@ class Holo(customtkinter.CTk):
             self.mouse_release_canvas_coords[0],
             self.mouse_release_canvas_coords[1],
             text=entry_text,
+            font=customtkinter.CTkFont(size=self.element_size),
         )
         print(self.canvas_text)
 
@@ -516,12 +523,12 @@ class Holo(customtkinter.CTk):
                 x_interp_float = np.linspace(
                     self.mouse_active_coords["previous"][0],
                     self.mouse_active_coords["current"][0],
-                    num=150 - self.brush_size,
+                    num=150 - self.element_size,
                 )
                 y_interp_float = np.linspace(
                     self.mouse_active_coords["previous"][1],
                     self.mouse_active_coords["current"][1],
-                    num=150 - self.brush_size,
+                    num=150 - self.element_size,
                 )
                 x_interp = [int(x) for x in x_interp_float]
                 y_interp = [int(y) for y in y_interp_float]
@@ -532,7 +539,7 @@ class Holo(customtkinter.CTk):
                             self.canvas.create_aa_circle(
                                 x,
                                 y_interp[index],
-                                self.brush_size,
+                                self.element_size,
                                 0,
                                 str(self.hex_color),
                                 tags="brush_stroke" + str(self.stroke_counter),
@@ -547,7 +554,7 @@ class Holo(customtkinter.CTk):
                                 self.mouse_down_canvas_coords[1],
                                 event.x,
                                 event.y,
-                                width=self.brush_size,
+                                width=self.element_size,
                                 fill=str(self.hex_color),
                                 tags="temp_rect",
                             )
@@ -578,7 +585,7 @@ class Holo(customtkinter.CTk):
                 self.canvas.create_aa_circle(
                     event.x,
                     event.y,
-                    self.brush_size,
+                    self.element_size,
                     0,
                     str(self.hex_color),
                     tags="brush_stroke" + str(self.stroke_counter),
@@ -590,7 +597,7 @@ class Holo(customtkinter.CTk):
                     self.mouse_down_canvas_coords[1],
                     self.mouse_release_canvas_coords[0],
                     self.mouse_release_canvas_coords[1],
-                    width=self.brush_size,
+                    width=self.element_size,
                     fill=str(self.hex_color),
                     outline=str(self.hex_color),
                 )
