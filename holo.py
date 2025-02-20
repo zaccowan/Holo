@@ -115,7 +115,7 @@ class TextEntryWindow(customtkinter.CTkToplevel):
 
         # Open a text file in write mode using a 'with' block
         with open(output_file_path, "w") as output_file:
-            print("Listening for speech. Say 'Terminate' to stop.")
+            # print("Listening for speech. Say 'Terminate' to stop.")
             # Start streaming and recognize speech
             while True:
                 data = stream.read(4096)  # read in chunks of 4096 bytes
@@ -129,7 +129,7 @@ class TextEntryWindow(customtkinter.CTkToplevel):
                         or self.do_stop_speech
                         or not self.winfo_exists()
                     ):
-                        print("Termination keyword detected. Stopping...")
+                        # print("Termination keyword detected. Stopping...")
                         break
 
                     # Write recognized text to the file
@@ -147,8 +147,6 @@ class TextEntryWindow(customtkinter.CTkToplevel):
 
         if os.path.exists(output_file_path):
             os.remove(output_file_path)
-        else:
-            print("The file does not exist")
 
     def set_text_from_entry(self):
         self.text = self.text_entry.get("0.0", "end")
@@ -177,6 +175,7 @@ class Holo(customtkinter.CTk):
         2: "Fill Tool",
         3: "Text Tool",
         4: "Transform Tool",
+        5: "Delete Tool",
     }
     active_tool = "Circle Brush"
     mouse_active_coords = {
@@ -188,6 +187,8 @@ class Holo(customtkinter.CTk):
 
     transform_active = False
     transform_tags = []
+
+    active_bbox = None
 
     mouse_down_canvas_coords = (0, 0)
     mouse_release_canvas_coords = (0, 0)
@@ -336,6 +337,13 @@ class Holo(customtkinter.CTk):
             text="Transform Tool",
         )
         self.radio_button_5.grid(row=5, column=0, pady=10, padx=20, sticky="nsew")
+        self.radio_button_6 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=5,
+            text="Delete Tool",
+        )
+        self.radio_button_6.grid(row=6, column=0, pady=10, padx=20, sticky="nsew")
 
         self.appearance_mode_label = customtkinter.CTkLabel(
             self.sidebar_frame, text="Appearance Mode:", anchor="w"
@@ -501,7 +509,10 @@ class Holo(customtkinter.CTk):
                 self.canvas.configure(cursor="xterm")
             case "Transform Tool":
                 self.canvas.configure(cursor="fleur")
-        print(self.active_tool)
+            case "Delete Tool":
+                self.canvas.configure(cursor="X_cursor")
+
+        # print(self.active_tool)
 
     def open_text_entry_window(self):
         if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
@@ -511,8 +522,8 @@ class Holo(customtkinter.CTk):
         else:
             self.toplevel_window.focus()  # if window exists focus it
 
-        if self.canvas_text is not None:
-            print(self.canvas_text)
+        # if self.canvas_text is not None:
+        #     print(self.canvas_text)
 
     def set_canvas_text(self, entry_text):
         self.canvas_text = entry_text
@@ -522,11 +533,12 @@ class Holo(customtkinter.CTk):
             text=entry_text,
             font=customtkinter.CTkFont(size=self.element_size),
         )
-        print(self.canvas_text)
+        # print(self.canvas_text)
 
     ################################
     # Canvas Mouse Events
     ################################
+
     def mouse_move(self, event):
 
         if self.mouse_down:
@@ -578,6 +590,35 @@ class Holo(customtkinter.CTk):
                     case "Transform Tool":
                         for tag in self.transform_tags:
                             self.canvas.moveto(tag, event.x, event.y)
+        else:
+            match self.active_tool:
+                case "Delete Tool":
+                    self.canvas.delete("temp_bbox")
+                    item = self.canvas.find_closest(event.x, event.y)[0]
+                    tag = self.canvas.gettags(item)
+                    print(tag)
+                    if self.active_bbox is None:
+                        self.active_bbox = self.canvas.bbox(tag[0])
+                        self.canvas.create_rectangle(
+                            self.active_bbox[0] - 20,
+                            self.active_bbox[1] - 20,
+                            self.active_bbox[2] + 20,
+                            self.active_bbox[3] + 20,
+                            outline="#555555",
+                            width=5,
+                            tags="temp_bbox",
+                        )
+                    elif self.active_bbox is not self.canvas.bbox(tag[0]):
+                        self.active_bbox = self.canvas.bbox(tag[0])
+                        self.canvas.create_rectangle(
+                            self.active_bbox[0] - 20,
+                            self.active_bbox[1] - 20,
+                            self.active_bbox[2] + 20,
+                            self.active_bbox[3] + 20,
+                            outline="#555555",
+                            width=5,
+                            tags="temp_bbox",
+                        )
 
     def canvas_mouse_down(self, event):
         if self.active_tool != "Transform Tool":
@@ -592,6 +633,7 @@ class Holo(customtkinter.CTk):
                     self.canvas.winfo_width(),
                     self.canvas.winfo_height(),
                     fill=self.hex_color,
+                    tags="brush_stroke" + str(self.stroke_counter),
                 )
             case "Transform Tool":
                 if self.transform_active:
@@ -602,7 +644,7 @@ class Holo(customtkinter.CTk):
                     item = self.canvas.find_closest(event.x, event.y)[0]
                     tag = self.canvas.gettags(item)
                     self.transform_tags.append(tag[0])
-        print("Mouse Down:", self.mouse_down_canvas_coords)
+        # print("Mouse Down:", self.mouse_down_canvas_coords)
 
     def canvas_mouse_release(self, event):
         self.mouse_down = False
@@ -630,10 +672,16 @@ class Holo(customtkinter.CTk):
                     width=self.element_size,
                     fill=str(self.hex_color),
                     outline=str(self.hex_color),
+                    tags="brush_stroke" + str(self.stroke_counter),
                 )
             case "Text Tool":
                 self.open_text_entry_window()
-        print("Mouse Release:", self.mouse_release_canvas_coords)
+            case "Delete Tool":
+                self.canvas.delete("temp_bbox")
+                item = self.canvas.find_closest(event.x, event.y)[0]
+                tag = self.canvas.gettags(item)
+                self.canvas.delete(tag[0])
+        # print("Mouse Release:", self.mouse_release_canvas_coords)
 
     ################################
     # Canvas Saving and AI Generation
@@ -657,9 +705,6 @@ class Holo(customtkinter.CTk):
                 self.canvas.winfo_rooty() + self.canvas.winfo_height(),
             )
         ).save(file_path)
-
-    def sidebar_button_event(self):
-        print("sidebar_button click")
 
     ################################
     # Webcam Functions
