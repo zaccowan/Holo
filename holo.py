@@ -218,6 +218,9 @@ class Holo(customtkinter.CTk):
     def __init__(self):
         super().__init__()
 
+        self.camera_thread = None
+        self.camera_running = False
+
         # configure window
         self.title("Holo")
         self.geometry(f"{1280}x{720}")
@@ -732,134 +735,113 @@ class Holo(customtkinter.CTk):
     ################################
 
     def open_camera(self):
+        if not self.camera_running:
+            self.camera_running = True
+            self.camera_thread = threading.Thread(target=self._camera_loop)
+            self.camera_thread.start()
+            self.open_camera_btn.configure(state="disabled")
+            self.close_camera_btn.configure(state="normal")
 
+    def _camera_loop(self):
         # Variables for mouse control
         mouse_pressed = False
         smoothing_factor = 5
         x_points = []
         y_points = []
 
-        if self.cap.isOpened():
+        if not self.cap.isOpened():
+            self.cap = cv2.VideoCapture(0)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+
+        while self.camera_running and self.cap.isOpened():
+
             self.open_camera_btn.configure(state="disabled")
             self.close_camera_btn.configure(state="normal")
 
-        if not self.cap.isOpened():
-            self.cap = cv2.VideoCapture(0)
+            # Capture the video frame by frame
+            _, frame = self.cap.read()
+            frame = cv2.flip(frame, 1)
+            # Convert image from one color space to other
+            opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.hands.process(opencv_image)
+            current_click = False
 
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
-            self.open_camera
+            if results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    index_tip_landmark = hand_landmarks.landmark[
+                        self.mp_hands.HandLandmark.INDEX_FINGER_TIP
+                    ]
+                    thumb_tip_landmark = hand_landmarks.landmark[
+                        self.mp_hands.HandLandmark.THUMB_TIP
+                    ]
+                    palm_landmark = hand_landmarks.landmark[
+                        self.mp_hands.HandLandmark.WRIST
+                    ]
+                    distance = math.hypot(
+                        index_tip_landmark.x - thumb_tip_landmark.x,
+                        index_tip_landmark.y - thumb_tip_landmark.y,
+                    )
+                    cv2.putText(
+                        opencv_image,
+                        "Distance: " + str(distance)[:6],
+                        (30, 50),
+                        1,
+                        2,
+                        (255, 255, 100),
+                        2,
+                    )
 
-        # while self.cap.isOpened():
+                    if distance < 0.05:  # Threshold for "OK" gesture
+                        current_click = True
 
-        # Capture the video frame by frame
-        _, frame = self.cap.read()
-
-        frame = cv2.flip(frame, 1)
-
-        # Convert image from one color space to other
-        opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        results = self.hands.process(opencv_image)
-
-        current_click = False
-
-        if results.multi_hand_landmarks:
-
-            for hand_landmarks in results.multi_hand_landmarks:
-                # print(hand_landmarks.landmark[0])
-
-                index_tip_landmark = hand_landmarks.landmark[
-                    self.mp_hands.HandLandmark.INDEX_FINGER_TIP
-                ]
-                thumb_tip_landmark = hand_landmarks.landmark[
-                    self.mp_hands.HandLandmark.THUMB_TIP
-                ]
-                palm_landmark = hand_landmarks.landmark[
-                    self.mp_hands.HandLandmark.WRIST
-                ]
-
-                distance = math.hypot(
-                    index_tip_landmark.x - thumb_tip_landmark.x,
-                    index_tip_landmark.y - thumb_tip_landmark.y,
-                )
-
-                cv2.putText(
-                    opencv_image,
-                    "Distance: " + str(distance)[:6],
-                    (30, 50),
-                    1,
-                    2,
-                    (255, 255, 100),
-                    2,
-                )
-
-                # Click detection (adjust threshold as needed)
-                if distance < 0.05:  # Threshold for "OK" gesture
-                    current_click = True
-
-                pyautogui.moveTo(
-                    palm_landmark.x * self.screen_width,
-                    palm_landmark.y * self.screen_height,
-                )
-
-                cv2.circle(
-                    opencv_image,
-                    (
-                        int(
-                            self.getPixelPos(index_tip_landmark.x, self.frame_width)
-                            - 10
+                    pyautogui.moveTo(
+                        palm_landmark.x * self.screen_width,
+                        palm_landmark.y * self.screen_height,
+                    )
+                    cv2.circle(
+                        opencv_image,
+                        (
+                            int(
+                                self.getPixelPos(index_tip_landmark.x, self.frame_width)
+                                - 10
+                            ),
+                            int(
+                                self.getPixelPos(
+                                    index_tip_landmark.y, self.frame_height
+                                )
+                                - 10
+                            ),
                         ),
-                        int(
-                            self.getPixelPos(index_tip_landmark.y, self.frame_height)
-                            - 10
-                        ),
-                    ),
-                    10,
-                    (0, 0, 255),
-                    -1,
-                )
+                        10,
+                        (0, 0, 255),
+                        -1,
+                    )
+                    self.mp_drawing.draw_landmarks(
+                        opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
+                    )
+                    break
 
-                # Draw hand landmarks (optional)
-                self.mp_drawing.draw_landmarks(
-                    opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
-                )
-                break
+            if current_click != mouse_pressed:
+                if current_click:
+                    pyautogui.mouseDown()
+                    mouse_pressed = True
+                else:
+                    pyautogui.mouseUp()
+                    mouse_pressed = False
 
-        # Handle mouse click state
-        if current_click != mouse_pressed:
-            if current_click:
-                pyautogui.mouseDown()
-                mouse_pressed = True
-            else:
+            if not results.multi_hand_landmarks and mouse_pressed:
                 pyautogui.mouseUp()
                 mouse_pressed = False
+                x_points = []
+                y_points = []
 
-        # Release mouse if no hands detected
-        if not results.multi_hand_landmarks and mouse_pressed:
-            pyautogui.mouseUp()
-            mouse_pressed = False
-            x_points = []
-            y_points = []
+            captured_image = Image.fromarray(opencv_image)
+            photo_image = ImageTk.PhotoImage(image=captured_image)
+            self.webcam_image_label.configure(text="")
+            self.webcam_image_label.photo_image = photo_image
+            self.webcam_image_label.configure(image=photo_image)
 
-        # Capture the latest frame and transform to image
-        captured_image = Image.fromarray(opencv_image)
-
-        # Convert captured image to photoimage
-        photo_image = ImageTk.PhotoImage(image=captured_image)
-
-        self.webcam_image_label.configure(text="")
-
-        # Displaying photoimage in the label
-        self.webcam_image_label.photo_image = photo_image
-
-        # Configure image in the label
-        self.webcam_image_label.configure(image=ImageTk.PhotoImage(captured_image))
-
-        # Repeat the same process after every 10 seconds
-        self.webcam_image_label.after(10, self.open_camera)
-
-    def close_camera(self):
         self.open_camera_btn.configure(state="normal")
         self.close_camera_btn.configure(state="disabled")
         self.cap.release()
@@ -871,6 +853,21 @@ class Holo(customtkinter.CTk):
         self.webcam_image_label.grid(row=2, column=0, columnspan=2)
         self.webcam_image_label.configure(image=None)
         self.webcam_image_label.configure(text="Webcam Image")
+
+        # self.open_camera_btn.configure(state="normal")
+        # self.close_camera_btn.configure(state="disabled")
+        # self.cap.release()
+        # cv2.destroyAllWindows()
+        # self.webcam_image_label.destroy()
+        # self.webcam_image_label = customtkinter.CTkLabel(
+        #     self.tabview.tab("Webcam Image"), text="Webcam Image"
+        # )
+        # self.webcam_image_label.grid(row=2, column=0, columnspan=2)
+        # self.webcam_image_label.configure(image=None)
+        # self.webcam_image_label.configure(text="Webcam Image")
+
+    def close_camera(self):
+        self.camera_running = False
 
     ################################
     # Helper functions
