@@ -19,3 +19,4 @@ vosk-model-small-en-us-0.15/ivector/online_cmvn.conf
 vosk-model-small-en-us-0.15/ivector/splice.conf
 holo.cmd
 holo.exe
+nuitka-crash-report.xml

@@ -206,6 +206,8 @@ class Holo(customtkinter.CTk):
 
     canvas_text = None
 
+    screen_width, screen_height = pyautogui.size()
+
     cap = cv2.VideoCapture(0)
     frame_width, frame_height = 1280, 720
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
@@ -408,24 +410,41 @@ class Holo(customtkinter.CTk):
 
         # Webcam Tab
         self.tabview.tab("Webcam Image").columnconfigure((0, 1), weight=1)
-        self.tabview.tab("Webcam Image").rowconfigure(0, weight=1)
+        self.tabview.tab("Webcam Image").rowconfigure(2, weight=1)
+        self.width_offset_scroller = customtkinter.CTkSlider(
+            self.tabview.tab("Webcam Image"),
+            command=self.set_element_size,
+            progress_color="#4477AA",
+            from_=0,
+            to=int(self.screen_width / 2),
+        )
+        self.width_offset_scroller.grid(row=0, column=0, padx=20)
+        self.height_offset_scroller = customtkinter.CTkSlider(
+            self.tabview.tab("Webcam Image"),
+            command=self.set_element_size,
+            progress_color="#4477AA",
+            from_=0,
+            to=int(self.screen_height / 2),
+        )
+        self.height_offset_scroller.grid(row=0, column=1, padx=20)
+
         self.webcam_image_label = customtkinter.CTkLabel(
             self.tabview.tab("Webcam Image"), text="Webcam Image"
         )
-        self.webcam_image_label.grid(row=0, column=0, columnspan=2)
+        self.webcam_image_label.grid(row=2, column=0, columnspan=2)
         self.open_camera_btn = customtkinter.CTkButton(
             self.tabview.tab("Webcam Image"),
             text="Open Camera",
             command=self.open_camera,
         )
-        self.open_camera_btn.grid(row=1, column=0)
+        self.open_camera_btn.grid(row=3, column=0)
         self.close_camera_btn = customtkinter.CTkButton(
             self.tabview.tab("Webcam Image"),
             text="Close Camera",
             state="disabled",
             command=self.close_camera,
         )
-        self.close_camera_btn.grid(row=1, column=1)
+        self.close_camera_btn.grid(row=3, column=1)
 
         # ################################
         # ################################
@@ -743,10 +762,18 @@ class Holo(customtkinter.CTk):
                 thumb_tip_landmark = hand_landmarks.landmark[
                     self.mp_hands.HandLandmark.THUMB_TIP
                 ]
+                palm_landmark = hand_landmarks.landmark[
+                    self.mp_hands.HandLandmark.WRIST
+                ]
 
                 distance = math.hypot(
                     index_tip_landmark.x - thumb_tip_landmark.x,
                     index_tip_landmark.y - thumb_tip_landmark.y,
+                )
+
+                pyautogui.moveTo(
+                    palm_landmark.x * self.screen_width,
+                    palm_landmark.y * self.screen_height,
                 )
 
                 cv2.putText(
@@ -812,7 +839,7 @@ class Holo(customtkinter.CTk):
         self.webcam_image_label = customtkinter.CTkLabel(
             self.tabview.tab("Webcam Image"), text="Webcam Image"
         )
-        self.webcam_image_label.grid(row=0, column=0, columnspan=2)
+        self.webcam_image_label.grid(row=2, column=0, columnspan=2)
         self.webcam_image_label.configure(image=None)
         self.webcam_image_label.configure(text="Webcam Image")
 
