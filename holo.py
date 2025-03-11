@@ -213,6 +213,8 @@ class Holo(customtkinter.CTk):
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
 
+    current_click = True
+
     def __init__(self):
         super().__init__()
 
@@ -731,6 +733,12 @@ class Holo(customtkinter.CTk):
 
     def open_camera(self):
 
+        # Variables for mouse control
+        mouse_pressed = False
+        smoothing_factor = 5
+        x_points = []
+        y_points = []
+
         if self.cap.isOpened():
             self.open_camera_btn.configure(state="disabled")
             self.close_camera_btn.configure(state="normal")
@@ -742,6 +750,8 @@ class Holo(customtkinter.CTk):
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
             self.open_camera
 
+        # while self.cap.isOpened():
+
         # Capture the video frame by frame
         _, frame = self.cap.read()
 
@@ -752,7 +762,10 @@ class Holo(customtkinter.CTk):
 
         results = self.hands.process(opencv_image)
 
+        current_click = False
+
         if results.multi_hand_landmarks:
+
             for hand_landmarks in results.multi_hand_landmarks:
                 # print(hand_landmarks.landmark[0])
 
@@ -771,11 +784,6 @@ class Holo(customtkinter.CTk):
                     index_tip_landmark.y - thumb_tip_landmark.y,
                 )
 
-                pyautogui.moveTo(
-                    palm_landmark.x * self.screen_width,
-                    palm_landmark.y * self.screen_height,
-                )
-
                 cv2.putText(
                     opencv_image,
                     "Distance: " + str(distance)[:6],
@@ -787,8 +795,13 @@ class Holo(customtkinter.CTk):
                 )
 
                 # Click detection (adjust threshold as needed)
-                if distance < 0.05:
+                if distance < 0.05:  # Threshold for "OK" gesture
                     current_click = True
+
+                pyautogui.moveTo(
+                    palm_landmark.x * self.screen_width,
+                    palm_landmark.y * self.screen_height,
+                )
 
                 cv2.circle(
                     opencv_image,
@@ -812,6 +825,22 @@ class Holo(customtkinter.CTk):
                     opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
                 )
                 break
+
+        # Handle mouse click state
+        if current_click != mouse_pressed:
+            if current_click:
+                pyautogui.mouseDown()
+                mouse_pressed = True
+            else:
+                pyautogui.mouseUp()
+                mouse_pressed = False
+
+        # Release mouse if no hands detected
+        if not results.multi_hand_landmarks and mouse_pressed:
+            pyautogui.mouseUp()
+            mouse_pressed = False
+            x_points = []
+            y_points = []
 
         # Capture the latest frame and transform to image
         captured_image = Image.fromarray(opencv_image)
