@@ -1,6 +1,7 @@
 complex_example.py
 deep_image.py
 hand_track.py
+deepseekHands.py
 recognized_text.txt
 speech.py
 vosk-model-small-en-us-0.15/README
