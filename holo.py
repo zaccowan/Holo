@@ -229,11 +229,15 @@ class Holo(customtkinter.CTk):
 
         self.camera_thread = None
         self.camera_running = False
+        self.stop_event = threading.Event()
 
         # configure window
         self.title("Holo")
         self.geometry(f"{1280}x{720}")
         self.bind("<Escape>", lambda e: app.quit())
+
+        # Override the protocol method to detect window close
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         self.toplevel_window = None
 
@@ -431,41 +435,68 @@ class Holo(customtkinter.CTk):
 
         # Webcam Tab
         self.tabview.tab("Webcam Image").columnconfigure((0, 1), weight=1)
-        self.tabview.tab("Webcam Image").rowconfigure(2, weight=1)
-        self.width_offset_scroller = customtkinter.CTkSlider(
+        self.tabview.tab("Webcam Image").rowconfigure(3, weight=1)
+
+        self.bound_center_label = customtkinter.CTkLabel(
+            self.tabview.tab("Webcam Image"), text="Bounding Box Center (X, Y):"
+        )
+        self.bound_center_label.grid(row=0, column=0)
+        self.bound_center_label = customtkinter.CTkLabel(
+            self.tabview.tab("Webcam Image"), text="Bounding Box Size (Width, Height):"
+        )
+        self.bound_center_label.grid(row=0, column=1)
+
+        self.x_center_scroller = customtkinter.CTkSlider(
             self.tabview.tab("Webcam Image"),
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
             to=int(self.screen_width / 2),
         )
-        self.width_offset_scroller.grid(row=0, column=0, padx=20)
-        self.height_offset_scroller = customtkinter.CTkSlider(
+        self.x_center_scroller.grid(row=1, column=0, padx=20, pady=10)
+        self.y_center_scroller = customtkinter.CTkSlider(
             self.tabview.tab("Webcam Image"),
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
             to=int(self.screen_height / 2),
         )
-        self.height_offset_scroller.grid(row=0, column=1, padx=20)
+        self.y_center_scroller.grid(row=2, column=0, padx=20, pady=10)
+
+        self.bound_width_scroller = customtkinter.CTkSlider(
+            self.tabview.tab("Webcam Image"),
+            command=self.set_element_size,
+            progress_color="#4477AA",
+            from_=0,
+            to=int(self.screen_width),
+        )
+        self.bound_width_scroller.grid(row=1, column=1, padx=20, pady=10)
+        self.bound_height_scroller = customtkinter.CTkSlider(
+            self.tabview.tab("Webcam Image"),
+            command=self.set_element_size,
+            progress_color="#4477AA",
+            from_=0,
+            to=int(self.screen_height),
+        )
+        self.bound_height_scroller.grid(row=2, column=1, padx=20, pady=10)
 
         self.webcam_image_label = customtkinter.CTkLabel(
             self.tabview.tab("Webcam Image"), text="Webcam Image"
         )
-        self.webcam_image_label.grid(row=2, column=0, columnspan=2)
+        self.webcam_image_label.grid(row=3, column=0, columnspan=2)
         self.open_camera_btn = customtkinter.CTkButton(
             self.tabview.tab("Webcam Image"),
             text="Open Camera",
             command=self.open_camera,
         )
-        self.open_camera_btn.grid(row=3, column=0)
+        self.open_camera_btn.grid(row=4, column=0)
         self.close_camera_btn = customtkinter.CTkButton(
             self.tabview.tab("Webcam Image"),
             text="Close Camera",
             state="disabled",
             command=self.close_camera,
         )
-        self.close_camera_btn.grid(row=3, column=1)
+        self.close_camera_btn.grid(row=4, column=1)
 
         # ################################
         # ################################
@@ -805,10 +836,12 @@ class Holo(customtkinter.CTk):
     def open_camera(self):
         if not self.camera_running:
             self.camera_running = True
+            self.stop_event.clear()
             self.camera_thread = threading.Thread(target=self._camera_loop)
             self.camera_thread.start()
             self.open_camera_btn.configure(state="disabled")
             self.close_camera_btn.configure(state="normal")
+            self.webcam_image_label.configure(text="")
 
     def _camera_loop(self):
         # Variables for mouse control
@@ -822,11 +855,9 @@ class Holo(customtkinter.CTk):
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
 
-        while self.camera_running and self.cap.isOpened():
-
-            self.open_camera_btn.configure(state="disabled")
-            self.close_camera_btn.configure(state="normal")
-
+        while (
+            self.camera_running and self.cap.isOpened() and not self.stop_event.is_set()
+        ):
             # Capture the video frame by frame
             _, frame = self.cap.read()
             frame = cv2.flip(frame, 1)
@@ -834,6 +865,25 @@ class Holo(customtkinter.CTk):
             opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = self.hands.process(opencv_image)
             current_click = False
+
+            bounding_center_x = self.x_center_scroller.get()
+            bounding_center_y = self.y_center_scroller.get()
+            bounding_width_x = self.bound_width_scroller.get()
+            bounding_width_y = self.bound_height_scroller.get()
+
+            opencv_image = cv2.rectangle(
+                opencv_image,
+                (
+                    int(bounding_center_x - (bounding_width_x / 2)),
+                    int(bounding_center_y - (bounding_width_y / 2)),
+                ),
+                (
+                    int(bounding_center_x + (bounding_width_x / 2)),
+                    int(bounding_center_y + (bounding_width_y / 2)),
+                ),
+                (255, 255, 255),
+                5,
+            )
 
             if results.multi_hand_landmarks:
                 for hand_landmarks in results.multi_hand_landmarks:
@@ -867,24 +917,6 @@ class Holo(customtkinter.CTk):
                         palm_landmark.x * self.screen_width,
                         palm_landmark.y * self.screen_height,
                     )
-                    cv2.circle(
-                        opencv_image,
-                        (
-                            int(
-                                self.getPixelPos(index_tip_landmark.x, self.frame_width)
-                                - 10
-                            ),
-                            int(
-                                self.getPixelPos(
-                                    index_tip_landmark.y, self.frame_height
-                                )
-                                - 10
-                            ),
-                        ),
-                        10,
-                        (0, 0, 255),
-                        -1,
-                    )
                     self.mp_drawing.draw_landmarks(
                         opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
                     )
@@ -906,10 +938,15 @@ class Holo(customtkinter.CTk):
 
             captured_image = Image.fromarray(opencv_image)
             photo_image = ImageTk.PhotoImage(image=captured_image)
-            self.webcam_image_label.configure(text="")
-            self.webcam_image_label.photo_image = photo_image
-            self.webcam_image_label.configure(image=photo_image)
 
+            # Update the label with the new image
+            self.webcam_image_label.configure(image=photo_image)
+            self.webcam_image_label.photo_image = photo_image
+
+        self.close_camera()
+
+    def close_camera(self):
+        self.camera_running = False
         self.open_camera_btn.configure(state="normal")
         self.close_camera_btn.configure(state="disabled")
         self.cap.release()
@@ -922,20 +959,10 @@ class Holo(customtkinter.CTk):
         self.webcam_image_label.configure(image=None)
         self.webcam_image_label.configure(text="Webcam Image")
 
-        # self.open_camera_btn.configure(state="normal")
-        # self.close_camera_btn.configure(state="disabled")
-        # self.cap.release()
-        # cv2.destroyAllWindows()
-        # self.webcam_image_label.destroy()
-        # self.webcam_image_label = customtkinter.CTkLabel(
-        #     self.tabview.tab("Webcam Image"), text="Webcam Image"
-        # )
-        # self.webcam_image_label.grid(row=2, column=0, columnspan=2)
-        # self.webcam_image_label.configure(image=None)
-        # self.webcam_image_label.configure(text="Webcam Image")
-
-    def close_camera(self):
-        self.camera_running = False
+    def on_closing(self):
+        self.close_camera()
+        self.stop_event.set()
+        self.destroy()
 
     ################################
     # Helper functions
