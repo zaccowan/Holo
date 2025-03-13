@@ -21,3 +21,5 @@ vosk-model-small-en-us-0.15/ivector/splice.conf
 holo.cmd
 holo.exe
 nuitka-crash-report.xml
+*.png
+*.jpg

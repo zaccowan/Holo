@@ -1,3 +1,4 @@
+# Imports for GUI library and styling system
 import os
 import tkinter
 import tkinter.messagebox
@@ -6,17 +7,25 @@ import customtkinter
 from tkinter import colorchooser, filedialog
 from PIL import ImageGrab, Image, ImageTk
 import ctypes
-import numpy as np
-import cv2
 
+# Imports for hand tracking and mouse manipulation
 import math
 import pyautogui
 import mediapipe as mp
+import cv2
+
+# General Imports
+import numpy as np
 import threading
 
+# Import for Speech Recognition
 import vosk
 import pyaudio
 import json
+
+## Import for AI Image Generation
+import replicate
+import base64
 
 
 customtkinter.set_appearance_mode(
@@ -412,6 +421,13 @@ class Holo(customtkinter.CTk):
         self.canvas.bind("<Motion>", self.mouse_move)
 
         # Generated AI Image Tab
+        self.tabview.tab("Genrated AI Image").columnconfigure(0, weight=1)
+        self.tabview.tab("Genrated AI Image").rowconfigure(0, weight=1)
+        self.gen_ai_image_label = customtkinter.CTkLabel(
+            self.tabview.tab("Genrated AI Image"),
+            text="Waiting for AI Generated Image (this may take time)",
+        )
+        self.gen_ai_image_label.grid(row=0, column=0)
 
         # Webcam Tab
         self.tabview.tab("Webcam Image").columnconfigure((0, 1), weight=1)
@@ -711,10 +727,62 @@ class Holo(customtkinter.CTk):
     # Canvas Saving and AI Generation
     ################################
     def generate_ai_image(self):
-        pass
+        self.canvas_save_png()
+        input_image_path = self.file_path
+        prompt = self.prompt_entry.get()
+        cv2.imshow("Input Sketch", cv2.imread(input_image_path))
+        print(prompt)
+
+        def run_replicate():
+            with open(input_image_path, "rb") as file:
+                data = base64.b64encode(file.read()).decode("utf-8")
+                image = f"data:application/octet-stream;base64,{data}"
+
+            output = replicate.run(
+                "qr2ai/outline:6f713aeb58eb5034ad353de02d7dd56c9efa79f2214e6b89a790dad8ca67ef49",
+                input={
+                    "seed": 0,
+                    "image": image,
+                    "width": 1280,
+                    "height": 720,
+                    "prompt": prompt,
+                    "sampler": "Euler a",
+                    "blur_size": 3,
+                    "use_canny": False,
+                    "lora_input": "",
+                    "lora_scale": "",
+                    "kernel_size": 3,
+                    "num_outputs": 1,
+                    "sketch_type": "HedPidNet",
+                    "suffix_prompt": "Imagine the harmonious blend of graceful forms and cosmic elegance, where each curve and line tells a story amidst the celestial backdrop, captured in a luxurious interplay of dark and light hues.",
+                    "guidance_scale": 7.5,
+                    "weight_primary": 0.7,
+                    "generate_square": False,
+                    "negative_prompt": "worst quality, low quality, low resolution, blurry, ugly, disfigured, uncrafted, filled ring, packed ring, cross, star, distorted, stagnant, watermark",
+                    "weight_secondary": 0.6,
+                    "erosion_iterations": 2,
+                    "dilation_iterations": 1,
+                    "num_inference_steps": 35,
+                    "adapter_conditioning_scale": 0.9,
+                },
+            )
+            for index, item in enumerate(output):
+                with open(f"output_{index}.png", "wb") as file:
+                    file.write(item.read())
+
+            ai_gen_image = cv2.imread("output_0.png")
+            ai_gen_image = Image.fromarray(ai_gen_image)
+            ai_photo_image = ImageTk.PhotoImage(image=ai_gen_image)
+            self.gen_ai_image_label.configure(text="")
+            self.gen_ai_image_label.ai_photo_image = ai_photo_image
+            self.gen_ai_image_label.configure(image=ai_photo_image)
+
+        replicate_thread = threading.Thread(target=run_replicate)
+        replicate_thread.start()
+        # pass
 
     def canvas_save_png(self):
-        file_path = filedialog.asksaveasfilename(
+        self.file_path = filedialog.asksaveasfilename(
             defaultextension="*.png",
             filetypes=(
                 ("PNG Files", "*.png"),
@@ -725,10 +793,10 @@ class Holo(customtkinter.CTk):
             bbox=(
                 self.canvas.winfo_rootx(),
                 self.canvas.winfo_rooty(),
-                self.canvas.winfo_rootx() + self.canvas.winfo_width(),
-                self.canvas.winfo_rooty() + self.canvas.winfo_height(),
+                self.canvas.winfo_rootx() + self.canvas.winfo_width() - 4,
+                self.canvas.winfo_rooty() + self.canvas.winfo_height() - 4,
             )
-        ).save(file_path)
+        ).save(self.file_path)
 
     ################################
     # Webcam Functions
