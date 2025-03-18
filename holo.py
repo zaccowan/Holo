@@ -7,6 +7,7 @@ import customtkinter
 from tkinter import colorchooser, filedialog
 from PIL import ImageGrab, Image, ImageTk
 import ctypes
+import time
 
 # Imports for hand tracking and mouse manipulation
 import math
@@ -216,6 +217,7 @@ class Holo(customtkinter.CTk):
     canvas_text = None
 
     screen_width, screen_height = pyautogui.size()
+    pyautogui.FAILSAFE = False
 
     cap = cv2.VideoCapture(0)
     frame_width, frame_height = 1280, 720
@@ -451,7 +453,7 @@ class Holo(customtkinter.CTk):
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
-            to=int(self.screen_width / 2),
+            to=int(self.frame_width),
         )
         self.x_center_scroller.grid(row=1, column=0, padx=20, pady=10)
         self.y_center_scroller = customtkinter.CTkSlider(
@@ -459,7 +461,7 @@ class Holo(customtkinter.CTk):
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
-            to=int(self.screen_height / 2),
+            to=int(self.frame_height),
         )
         self.y_center_scroller.grid(row=2, column=0, padx=20, pady=10)
 
@@ -468,7 +470,7 @@ class Holo(customtkinter.CTk):
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
-            to=int(self.screen_width),
+            to=int(self.frame_width * 2),
         )
         self.bound_width_scroller.grid(row=1, column=1, padx=20, pady=10)
         self.bound_height_scroller = customtkinter.CTkSlider(
@@ -476,7 +478,7 @@ class Holo(customtkinter.CTk):
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
-            to=int(self.screen_height),
+            to=int(self.frame_height * 2),
         )
         self.bound_height_scroller.grid(row=2, column=1, padx=20, pady=10)
 
@@ -858,8 +860,13 @@ class Holo(customtkinter.CTk):
         while (
             self.camera_running and self.cap.isOpened() and not self.stop_event.is_set()
         ):
+            start_time = time.time()
+
             # Capture the video frame by frame
-            _, frame = self.cap.read()
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+
             frame = cv2.flip(frame, 1)
             # Convert image from one color space to other
             opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -868,18 +875,18 @@ class Holo(customtkinter.CTk):
 
             bounding_center_x = self.x_center_scroller.get()
             bounding_center_y = self.y_center_scroller.get()
-            bounding_width_x = self.bound_width_scroller.get()
-            bounding_width_y = self.bound_height_scroller.get()
+            bounding_width = self.bound_width_scroller.get()
+            bounding_height = self.bound_height_scroller.get()
 
             opencv_image = cv2.rectangle(
                 opencv_image,
                 (
-                    int(bounding_center_x - (bounding_width_x / 2)),
-                    int(bounding_center_y - (bounding_width_y / 2)),
+                    int(bounding_center_x - (bounding_width / 2)),
+                    int(bounding_center_y - (bounding_height / 2)),
                 ),
                 (
-                    int(bounding_center_x + (bounding_width_x / 2)),
-                    int(bounding_center_y + (bounding_width_y / 2)),
+                    int(bounding_center_x + (bounding_width / 2)),
+                    int(bounding_center_y + (bounding_height / 2)),
                 ),
                 (255, 255, 255),
                 5,
@@ -900,26 +907,41 @@ class Holo(customtkinter.CTk):
                         index_tip_landmark.x - thumb_tip_landmark.x,
                         index_tip_landmark.y - thumb_tip_landmark.y,
                     )
-                    cv2.putText(
-                        opencv_image,
-                        "Distance: " + str(distance)[:6],
-                        (30, 50),
-                        1,
-                        2,
-                        (255, 255, 100),
-                        2,
-                    )
+                    # cv2.putText(
+                    #     opencv_image,
+                    #     "Distance: " + str(distance)[:6],
+                    #     (30, 50),
+                    #     1,
+                    #     2,
+                    #     (255, 255, 100),
+                    #     2,
+                    # )
 
                     if distance < 0.05:  # Threshold for "OK" gesture
                         current_click = True
 
-                    pyautogui.moveTo(
-                        palm_landmark.x * self.screen_width,
-                        palm_landmark.y * self.screen_height,
+                    mouse_x = np.interp(
+                        palm_landmark.x * self.frame_width,
+                        [
+                            int(bounding_center_x - (bounding_width / 2)),
+                            int(bounding_center_x + (bounding_width / 2)),
+                        ],
+                        [0, self.screen_width - 1],
                     )
-                    self.mp_drawing.draw_landmarks(
-                        opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
+                    mouse_y = np.interp(
+                        palm_landmark.y * self.frame_height,
+                        [
+                            int(bounding_center_y - (bounding_height / 2)),
+                            int(bounding_center_y + (bounding_height / 2)),
+                        ],
+                        [0, self.screen_height - 1],
                     )
+
+                    pyautogui.moveTo(int(mouse_x), int(mouse_y))
+
+                    # self.mp_drawing.draw_landmarks(
+                    #     opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
+                    # )
                     break
 
             if current_click != mouse_pressed:
@@ -943,10 +965,15 @@ class Holo(customtkinter.CTk):
             self.webcam_image_label.configure(image=photo_image)
             self.webcam_image_label.photo_image = photo_image
 
+            # Limit the frame rate to 30 FPS
+            elapsed_time = time.time() - start_time
+            time.sleep(max(0, 1 / 30 - elapsed_time))
+
         self.close_camera()
 
     def close_camera(self):
         self.camera_running = False
+        self.stop_event.set()
         self.open_camera_btn.configure(state="normal")
         self.close_camera_btn.configure(state="disabled")
         self.cap.release()
@@ -955,13 +982,12 @@ class Holo(customtkinter.CTk):
         self.webcam_image_label = customtkinter.CTkLabel(
             self.tabview.tab("Webcam Image"), text="Webcam Image"
         )
-        self.webcam_image_label.grid(row=2, column=0, columnspan=2)
+        self.webcam_image_label.grid(row=3, column=0, columnspan=2)
         self.webcam_image_label.configure(image=None)
         self.webcam_image_label.configure(text="Webcam Image")
 
     def on_closing(self):
         self.close_camera()
-        self.stop_event.set()
         self.destroy()
 
     ################################
@@ -969,6 +995,17 @@ class Holo(customtkinter.CTk):
     ################################
     def getPixelPos(self, floatCoord, frameDim):
         return floatCoord * frameDim
+
+    def translate(value, leftMin, leftMax, rightMin, rightMax):
+        # Figure out how 'wide' each range is
+        leftSpan = leftMax - leftMin
+        rightSpan = rightMax - rightMin
+
+        # Convert the left range into a 0-1 range (float)
+        valueScaled = float(value - leftMin) / float(leftSpan)
+
+        # Convert the 0-1 range into a value in the right range.
+        return rightMin + (valueScaled * rightSpan)
 
 
 if __name__ == "__main__":
