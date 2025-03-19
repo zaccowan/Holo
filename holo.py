@@ -1,5 +1,6 @@
 # Imports for GUI library and styling system
 import os
+import sys
 import tkinter
 import tkinter.messagebox
 import tkinter.ttk
@@ -464,6 +465,30 @@ class Holo(customtkinter.CTk):
             row=2, column=2, padx=(20, 20), pady=(20, 20), sticky="ew"
         )
 
+        # Add layer panel frame
+        self.layer_panel = customtkinter.CTkFrame(
+            self.tabview.tab("Canvas"), width=200, corner_radius=0
+        )
+        self.layer_panel.grid(row=0, column=3, rowspan=3, sticky="nsew", padx=5, pady=5)
+        self.layer_panel.grid_columnconfigure(0, weight=1)
+
+        # Add layer panel label
+        self.layer_panel_label = customtkinter.CTkLabel(
+            self.layer_panel,
+            text="Layers",
+            font=customtkinter.CTkFont(size=16, weight="bold"),
+        )
+        self.layer_panel_label.grid(row=0, column=0, pady=5, padx=5)
+
+        # Add scrollable frame for layers
+        self.layer_container = customtkinter.CTkScrollableFrame(
+            self.layer_panel, width=180, height=600
+        )
+        self.layer_container.grid(row=1, column=0, pady=5, padx=5, sticky="nsew")
+
+        # Dictionary to store layer buttons
+        self.layer_buttons = {}
+
         # Generated AI Image Tab
         self.tabview.tab("Genrated AI Image").columnconfigure(0, weight=1)
         self.tabview.tab("Genrated AI Image").rowconfigure(0, weight=1)
@@ -713,14 +738,27 @@ class Holo(customtkinter.CTk):
                     tags="brush_stroke" + str(self.stroke_counter),
                 )
             case "Transform Tool":
-                if self.transform_active:
+                item = self.canvas.find_closest(event.x, event.y)[0]
+                tag = self.canvas.gettags(item)
+                if not self.transform_active:
+                    self.transform_active = True
+                    self.transform_tags = [tag[0]]
+                    # Show bounding box for selected stroke
+                    self.canvas.delete("temp_bbox")
+                    bbox = self.canvas.bbox(tag[0])
+                    if bbox:
+                        self.canvas.create_rectangle(
+                            bbox[0] - 20,
+                            bbox[1] - 20,
+                            bbox[2] + 20,
+                            bbox[3] + 20,
+                            outline="#555555",
+                            width=5,
+                            tags="temp_bbox",
+                        )
+                elif tag[0] not in self.transform_tags:
                     self.transform_active = False
                     self.transform_tags.clear()
-                else:
-                    self.transform_active = True
-                    item = self.canvas.find_closest(event.x, event.y)[0]
-                    tag = self.canvas.gettags(item)
-                    self.transform_tags.append(tag[0])
 
     def canvas_mouse_release(self, event):
         self.mouse_down = False
@@ -729,6 +767,9 @@ class Holo(customtkinter.CTk):
         self.mouse_release_canvas_coords = (event.x, event.y)
 
         match self.active_tool:
+            case "Circle Brush":
+                # Add the new stroke to the layer panel
+                self.add_layer_to_panel(f"brush_stroke{self.stroke_counter}")
             case "Rectangle Tool":
                 self.canvas.delete("temp_rect")
                 self.canvas.create_rectangle(
@@ -741,13 +782,92 @@ class Holo(customtkinter.CTk):
                     outline=str(self.hex_color),
                     tags="brush_stroke" + str(self.stroke_counter),
                 )
+                # Add the new rectangle to the layer panel
+                self.add_layer_to_panel(f"brush_stroke{self.stroke_counter}")
             case "Text Tool":
                 self.open_text_entry_window()
             case "Delete Tool":
                 self.canvas.delete("temp_bbox")
                 item = self.canvas.find_closest(event.x, event.y)[0]
                 tag = self.canvas.gettags(item)
-                self.canvas.delete(tag[0])
+                if tag and tag[0].startswith(
+                    "brush_stroke"
+                ):  # Ensure it's a brush stroke
+                    self.delete_layer(tag[0])
+
+    ################################
+    # Layer Window
+    ################################
+    def add_layer_to_panel(self, stroke_tag):
+        layer_frame = customtkinter.CTkFrame(self.layer_container)
+        layer_frame.grid(
+            row=len(self.layer_buttons), column=0, pady=2, padx=5, sticky="ew"
+        )
+        layer_frame.grid_columnconfigure(0, weight=1)
+
+        # Make the label clickable and highlight on hover
+        layer_label = customtkinter.CTkLabel(
+            layer_frame,
+            text=f"Stroke {stroke_tag.replace('brush_stroke', '')}",
+            cursor="hand2",
+        )
+        layer_label.grid(row=0, column=0, pady=2, padx=5, sticky="w")
+
+        # Bind click event to select the stroke
+        layer_label.bind("<Button-1>", lambda e, tag=stroke_tag: self.select_layer(tag))
+
+        delete_button = customtkinter.CTkButton(
+            layer_frame,
+            text="Delete",
+            width=60,
+            height=24,
+            command=lambda t=stroke_tag: self.delete_layer(t),
+        )
+        delete_button.grid(row=0, column=1, pady=2, padx=5)
+
+        self.layer_buttons[stroke_tag] = {
+            "frame": layer_frame,
+            "label": layer_label,
+            "delete_button": delete_button,
+        }
+
+    def delete_layer(self, stroke_tag):
+        self.canvas.delete(stroke_tag)
+        self.layer_buttons[stroke_tag].destroy()
+        del self.layer_buttons[stroke_tag]
+
+    def select_layer(self, stroke_tag):
+        # Reset previous selections
+        for layer_info in self.layer_buttons.values():
+            layer_info["frame"].configure(fg_color=("gray86", "gray17"))
+            layer_info["label"].configure(fg_color=("gray86", "gray17"))
+
+        # Highlight selected layer
+        self.layer_buttons[stroke_tag]["frame"].configure(
+            fg_color=("#4477AA", "#4477AA")
+        )
+        self.layer_buttons[stroke_tag]["label"].configure(
+            fg_color=("#4477AA", "#4477AA")
+        )
+
+        # Set transform tool as active
+        self.radio_tool_var.set(4)  # Index for Transform Tool
+        self.transform_active = True
+        self.transform_tags = [stroke_tag]
+
+        # Show bounding box for selected stroke
+        self.canvas.delete("temp_bbox")
+        bbox = self.canvas.bbox(stroke_tag)
+        if bbox:
+            self.canvas.create_rectangle(
+                bbox[0] - 20,
+                bbox[1] - 20,
+                bbox[2] + 20,
+                bbox[3] + 20,
+                outline="#555555",
+                width=5,
+                tags="temp_bbox",
+            )
 
     ################################
     # Canvas Saving and AI Generation
