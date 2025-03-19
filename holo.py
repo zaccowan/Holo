@@ -8,6 +8,7 @@ from tkinter import colorchooser, filedialog
 from PIL import ImageGrab, Image, ImageTk
 import ctypes
 import time
+import collections
 
 # Imports for hand tracking and mouse manipulation
 import math
@@ -233,6 +234,11 @@ class Holo(customtkinter.CTk):
         self.camera_running = False
         self.stop_event = threading.Event()
 
+        # Smoothing parameters
+        self.smoothing_window_size = 5
+        self.mouse_x_positions = collections.deque(maxlen=self.smoothing_window_size)
+        self.mouse_y_positions = collections.deque(maxlen=self.smoothing_window_size)
+
         # configure window
         self.title("Holo")
         self.geometry(f"{1280}x{720}")
@@ -422,9 +428,41 @@ class Holo(customtkinter.CTk):
         self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
         self.canvas.grid(row=0, column=0, columnspan=3)
 
+        # Canvas Mouse Events
         self.canvas.bind("<Button-1>", self.canvas_mouse_down)
         self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
         self.canvas.bind("<Motion>", self.mouse_move)
+
+        # Generation and Saving Buttons
+        self.prompt_entry = customtkinter.CTkEntry(
+            self.tabview.tab("Canvas"),
+            placeholder_text="Prompt to guide image generation...",
+        )
+        self.prompt_entry.grid(
+            row=2, column=0, padx=(20, 20), pady=(10, 10), sticky="ew"
+        )
+        self.generate_ai_image_btn = customtkinter.CTkButton(
+            master=self.tabview.tab("Canvas"),
+            fg_color="transparent",
+            border_width=2,
+            text="Generate AI Image",
+            text_color=("gray10", "#DCE4EE"),
+            command=self.generate_ai_image,
+        )
+        self.generate_ai_image_btn.grid(
+            row=2, column=1, padx=(20, 20), pady=(20, 20), sticky="ew"
+        )
+        self.save_canvas = customtkinter.CTkButton(
+            master=self.tabview.tab("Canvas"),
+            fg_color="transparent",
+            border_width=2,
+            text="Save Drawing",
+            text_color=("gray10", "#DCE4EE"),
+            command=self.canvas_save_png,
+        )
+        self.save_canvas.grid(
+            row=2, column=2, padx=(20, 20), pady=(20, 20), sticky="ew"
+        )
 
         # Generated AI Image Tab
         self.tabview.tab("Genrated AI Image").columnconfigure(0, weight=1)
@@ -505,36 +543,6 @@ class Holo(customtkinter.CTk):
         # # create main entry and button
         # ################################
         # ################################
-        self.prompt_entry = customtkinter.CTkEntry(
-            self.tabview.tab("Canvas"),
-            placeholder_text="Prompt to guide image generation...",
-        )
-        self.prompt_entry.grid(
-            row=1, column=0, padx=(20, 20), pady=(10, 10), sticky="ew"
-        )
-
-        self.generate_ai_image_btn = customtkinter.CTkButton(
-            master=self.tabview.tab("Canvas"),
-            fg_color="transparent",
-            border_width=2,
-            text="Generate AI Image",
-            text_color=("gray10", "#DCE4EE"),
-            command=self.generate_ai_image,
-        )
-        self.generate_ai_image_btn.grid(
-            row=1, column=1, padx=(20, 20), pady=(20, 20), sticky="ew"
-        )
-        self.save_canvas = customtkinter.CTkButton(
-            master=self.tabview.tab("Canvas"),
-            fg_color="transparent",
-            border_width=2,
-            text="Save Drawing",
-            text_color=("gray10", "#DCE4EE"),
-            command=self.canvas_save_png,
-        )
-        self.save_canvas.grid(
-            row=1, column=2, padx=(20, 20), pady=(20, 20), sticky="ew"
-        )
 
         # set default values
         self.appearance_mode_optionemenu.set("Dark")
@@ -613,40 +621,31 @@ class Holo(customtkinter.CTk):
     ################################
 
     def mouse_move(self, event):
-
+        # Clear any temporary rectangles draw by delete or transform tool
+        self.canvas.delete("temp_bbox")
         if self.mouse_down:
             self.mouse_active_coords["previous"] = self.mouse_active_coords["current"]
             self.mouse_active_coords["current"] = (event.x, event.y)
-            # print(self.mouse_active_coords)
+
             if (
                 self.mouse_active_coords["previous"]
                 != self.mouse_active_coords["current"]
-                and self.mouse_active_coords["previous"] != None
+                and self.mouse_active_coords["previous"] is not None
             ):
-                x_interp_float = np.linspace(
-                    self.mouse_active_coords["previous"][0],
-                    self.mouse_active_coords["current"][0],
-                    num=150 - self.element_size,
-                )
-                y_interp_float = np.linspace(
-                    self.mouse_active_coords["previous"][1],
-                    self.mouse_active_coords["current"][1],
-                    num=150 - self.element_size,
-                )
-                x_interp = [int(x) for x in x_interp_float]
-                y_interp = [int(y) for y in y_interp_float]
-
                 match self.active_tool:
                     case "Circle Brush":
-                        for index, x in enumerate(x_interp):
-                            self.canvas.create_aa_circle(
-                                x,
-                                y_interp[index],
-                                self.element_size,
-                                0,
-                                str(self.hex_color),
-                                tags="brush_stroke" + str(self.stroke_counter),
-                            )
+                        self.canvas.create_line(
+                            self.mouse_active_coords["previous"][0],
+                            self.mouse_active_coords["previous"][1],
+                            self.mouse_active_coords["current"][0],
+                            self.mouse_active_coords["current"][1],
+                            fill=self.hex_color,
+                            width=self.element_size,
+                            capstyle=tkinter.ROUND,
+                            smooth=True,
+                            splinesteps=36,
+                            tags="brush_stroke" + str(self.stroke_counter),
+                        )
                     case "Rectangle Tool":
                         self.temp_rect = None
                         if self.mouse_down:
@@ -661,37 +660,42 @@ class Holo(customtkinter.CTk):
                                 tags="temp_rect",
                             )
                     case "Transform Tool":
-                        for tag in self.transform_tags:
-                            self.canvas.moveto(tag, event.x, event.y)
+                        if self.transform_active:
+                            dx = event.x - self.mouse_down_canvas_coords[0]
+                            dy = event.y - self.mouse_down_canvas_coords[1]
+                            for tag in self.transform_tags:
+                                self.canvas.move(tag, dx, dy)
+                            self.canvas.move("temp_bbox", dx, dy)
+                            self.mouse_down_canvas_coords = (event.x, event.y)
+                        else:
+                            self.update_temp_bbox(event)
         else:
             match self.active_tool:
                 case "Delete Tool":
-                    self.canvas.delete("temp_bbox")
-                    item = self.canvas.find_closest(event.x, event.y)[0]
-                    tag = self.canvas.gettags(item)
-                    print(tag)
-                    if self.active_bbox is None:
-                        self.active_bbox = self.canvas.bbox(tag[0])
-                        self.canvas.create_rectangle(
-                            self.active_bbox[0] - 20,
-                            self.active_bbox[1] - 20,
-                            self.active_bbox[2] + 20,
-                            self.active_bbox[3] + 20,
-                            outline="#555555",
-                            width=5,
-                            tags="temp_bbox",
-                        )
-                    elif self.active_bbox is not self.canvas.bbox(tag[0]):
-                        self.active_bbox = self.canvas.bbox(tag[0])
-                        self.canvas.create_rectangle(
-                            self.active_bbox[0] - 20,
-                            self.active_bbox[1] - 20,
-                            self.active_bbox[2] + 20,
-                            self.active_bbox[3] + 20,
-                            outline="#555555",
-                            width=5,
-                            tags="temp_bbox",
-                        )
+                    self.update_temp_bbox(event)
+                case "Transform Tool":
+                    self.update_temp_bbox(event)
+
+    def update_temp_bbox(self, event):
+        self.canvas.delete("temp_bbox")
+        item = self.canvas.find_closest(event.x, event.y)
+        if item:
+            tag = self.canvas.gettags(item[0])
+            if tag:
+                self.active_bbox = self.canvas.bbox(tag[0])
+                if self.active_tool == "Delete Tool":
+                    outline_color = "#FF5555"  # Slightly red color
+                else:
+                    outline_color = "#555555"
+                self.canvas.create_rectangle(
+                    self.active_bbox[0] - 20,
+                    self.active_bbox[1] - 20,
+                    self.active_bbox[2] + 20,
+                    self.active_bbox[3] + 20,
+                    outline=outline_color,
+                    width=5,
+                    tags="temp_bbox",
+                )
 
     def canvas_mouse_down(self, event):
         if self.active_tool != "Transform Tool":
@@ -717,7 +721,6 @@ class Holo(customtkinter.CTk):
                     item = self.canvas.find_closest(event.x, event.y)[0]
                     tag = self.canvas.gettags(item)
                     self.transform_tags.append(tag[0])
-        # print("Mouse Down:", self.mouse_down_canvas_coords)
 
     def canvas_mouse_release(self, event):
         self.mouse_down = False
@@ -726,15 +729,6 @@ class Holo(customtkinter.CTk):
         self.mouse_release_canvas_coords = (event.x, event.y)
 
         match self.active_tool:
-            case "Circle Brush":
-                self.canvas.create_aa_circle(
-                    event.x,
-                    event.y,
-                    self.element_size,
-                    0,
-                    str(self.hex_color),
-                    tags="brush_stroke" + str(self.stroke_counter),
-                )
             case "Rectangle Tool":
                 self.canvas.delete("temp_rect")
                 self.canvas.create_rectangle(
@@ -754,7 +748,6 @@ class Holo(customtkinter.CTk):
                 item = self.canvas.find_closest(event.x, event.y)[0]
                 tag = self.canvas.gettags(item)
                 self.canvas.delete(tag[0])
-        # print("Mouse Release:", self.mouse_release_canvas_coords)
 
     ################################
     # Canvas Saving and AI Generation
@@ -848,9 +841,6 @@ class Holo(customtkinter.CTk):
     def _camera_loop(self):
         # Variables for mouse control
         mouse_pressed = False
-        smoothing_factor = 5
-        x_points = []
-        y_points = []
 
         if not self.cap.isOpened():
             self.cap = cv2.VideoCapture(0)
@@ -893,56 +883,67 @@ class Holo(customtkinter.CTk):
             )
 
             if results.multi_hand_landmarks:
-                for hand_landmarks in results.multi_hand_landmarks:
-                    index_tip_landmark = hand_landmarks.landmark[
-                        self.mp_hands.HandLandmark.INDEX_FINGER_TIP
-                    ]
-                    thumb_tip_landmark = hand_landmarks.landmark[
-                        self.mp_hands.HandLandmark.THUMB_TIP
-                    ]
-                    palm_landmark = hand_landmarks.landmark[
-                        self.mp_hands.HandLandmark.WRIST
-                    ]
-                    distance = math.hypot(
-                        index_tip_landmark.x - thumb_tip_landmark.x,
-                        index_tip_landmark.y - thumb_tip_landmark.y,
-                    )
-                    # cv2.putText(
-                    #     opencv_image,
-                    #     "Distance: " + str(distance)[:6],
-                    #     (30, 50),
-                    #     1,
-                    #     2,
-                    #     (255, 255, 100),
-                    #     2,
-                    # )
+                hand_landmarks = results.multi_hand_landmarks[0]
+                index_tip_landmark = hand_landmarks.landmark[
+                    self.mp_hands.HandLandmark.INDEX_FINGER_TIP
+                ]
+                thumb_tip_landmark = hand_landmarks.landmark[
+                    self.mp_hands.HandLandmark.THUMB_TIP
+                ]
+                palm_landmark = hand_landmarks.landmark[
+                    self.mp_hands.HandLandmark.WRIST
+                ]
+                distance = math.hypot(
+                    index_tip_landmark.x - thumb_tip_landmark.x,
+                    index_tip_landmark.y - thumb_tip_landmark.y,
+                )
+                cv2.putText(
+                    opencv_image,
+                    "Distance: " + str(distance)[:6],
+                    (30, 50),
+                    1,
+                    2,
+                    (255, 255, 100),
+                    2,
+                )
 
-                    if distance < 0.05:  # Threshold for "OK" gesture
-                        current_click = True
+                if distance < 0.05:  # Threshold for "OK" gesture
+                    current_click = True
 
-                    mouse_x = np.interp(
-                        palm_landmark.x * self.frame_width,
-                        [
-                            int(bounding_center_x - (bounding_width / 2)),
-                            int(bounding_center_x + (bounding_width / 2)),
-                        ],
-                        [0, self.screen_width - 1],
-                    )
-                    mouse_y = np.interp(
-                        palm_landmark.y * self.frame_height,
-                        [
-                            int(bounding_center_y - (bounding_height / 2)),
-                            int(bounding_center_y + (bounding_height / 2)),
-                        ],
-                        [0, self.screen_height - 1],
-                    )
+                mouse_x = np.interp(
+                    palm_landmark.x * self.frame_width,
+                    [
+                        int(bounding_center_x - (bounding_width / 2)),
+                        int(bounding_center_x + (bounding_width / 2)),
+                    ],
+                    [0, self.screen_width - 1],
+                )
+                mouse_y = np.interp(
+                    palm_landmark.y * self.frame_height,
+                    [
+                        int(bounding_center_y - (bounding_height / 2)),
+                        int(bounding_center_y + (bounding_height / 2)),
+                    ],
+                    [0, self.screen_height - 1],
+                )
 
-                    pyautogui.moveTo(int(mouse_x), int(mouse_y))
+                # Add the new positions to the deque
+                self.mouse_x_positions.append(mouse_x)
+                self.mouse_y_positions.append(mouse_y)
 
-                    # self.mp_drawing.draw_landmarks(
-                    #     opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
-                    # )
-                    break
+                # Calculate the average positions
+                smoothed_mouse_x = sum(self.mouse_x_positions) / len(
+                    self.mouse_x_positions
+                )
+                smoothed_mouse_y = sum(self.mouse_y_positions) / len(
+                    self.mouse_y_positions
+                )
+
+                pyautogui.moveTo(int(smoothed_mouse_x), int(smoothed_mouse_y))
+
+                self.mp_drawing.draw_landmarks(
+                    opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
+                )
 
             if current_click != mouse_pressed:
                 if current_click:
@@ -955,8 +956,6 @@ class Holo(customtkinter.CTk):
             if not results.multi_hand_landmarks and mouse_pressed:
                 pyautogui.mouseUp()
                 mouse_pressed = False
-                x_points = []
-                y_points = []
 
             captured_image = Image.fromarray(opencv_image)
             photo_image = ImageTk.PhotoImage(image=captured_image)
@@ -987,8 +986,8 @@ class Holo(customtkinter.CTk):
         self.webcam_image_label.configure(text="Webcam Image")
 
     def on_closing(self):
-        self.close_camera()
         self.destroy()
+        self.close_camera()
 
     ################################
     # Helper functions
