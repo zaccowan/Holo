@@ -221,7 +221,7 @@ class Holo(customtkinter.CTk):
     screen_width, screen_height = pyautogui.size()
     pyautogui.FAILSAFE = False
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(2, cv2.CAP_DSHOW)
     frame_width, frame_height = 1280, 720
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
@@ -963,7 +963,7 @@ class Holo(customtkinter.CTk):
         mouse_pressed = False
 
         if not self.cap.isOpened():
-            self.cap = cv2.VideoCapture(0)
+            self.cap = cv2.VideoCapture(2, cv2.CAP_DSHOW)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
 
@@ -977,7 +977,7 @@ class Holo(customtkinter.CTk):
             if not ret:
                 break
 
-            frame = cv2.flip(frame, 1)
+            # frame = cv2.flip(frame, 1)
             # Convert image from one color space to other
             opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = self.hands.process(opencv_image)
