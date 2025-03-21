@@ -221,15 +221,13 @@ class Holo(customtkinter.CTk):
     screen_width, screen_height = pyautogui.size()
     pyautogui.FAILSAFE = False
 
-    cap = cv2.VideoCapture(2, cv2.CAP_DSHOW)
-    frame_width, frame_height = 1280, 720
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
-
     current_click = True
 
     def __init__(self):
         super().__init__()
+
+        self.cap = None  # Initialize as None instead of with specific index
+        self.frame_width, self.frame_height = 1280, 720
 
         self.camera_thread = None
         self.camera_running = False
@@ -499,69 +497,115 @@ class Holo(customtkinter.CTk):
         self.gen_ai_image_label.grid(row=0, column=0)
 
         # Webcam Tab
-        self.tabview.tab("Webcam Image").columnconfigure((0, 1), weight=1)
-        self.tabview.tab("Webcam Image").rowconfigure(3, weight=1)
+        self.tabview.tab("Webcam Image").columnconfigure((0, 1, 2, 3), weight=1)
+        self.tabview.tab("Webcam Image").rowconfigure(4, weight=1)
 
-        self.bound_center_label = customtkinter.CTkLabel(
-            self.tabview.tab("Webcam Image"), text="Bounding Box Center (X, Y):"
+        # Camera controls frame - left side
+        self.camera_controls_frame = customtkinter.CTkFrame(
+            self.tabview.tab("Webcam Image")
         )
-        self.bound_center_label.grid(row=0, column=0)
-        self.bound_center_label = customtkinter.CTkLabel(
-            self.tabview.tab("Webcam Image"), text="Bounding Box Size (Width, Height):"
+        self.camera_controls_frame.grid(row=0, column=0, padx=5, pady=5)
+        self.webcam_selection_label = customtkinter.CTkLabel(
+            self.camera_controls_frame, text="Webcam Settings"
         )
-        self.bound_center_label.grid(row=0, column=1)
+        self.webcam_selection_label.grid(row=0, column=0, columnspan=2, padx=5, pady=5)
+        self.camera_controls_frame.grid_columnconfigure(0, weight=1)
+
+        # Camera selection dropdown
+        self.available_cameras = self.list_available_cameras()
+        self.camera_select = customtkinter.CTkOptionMenu(
+            self.camera_controls_frame,
+            values=[f"Camera {i}" for i in self.available_cameras],
+            command=self.change_camera,
+        )
+        self.camera_select.grid(row=1, column=0, padx=5, pady=5)
+
+        # Flip camera toggle below dropdown
+        self.flip_camera = customtkinter.CTkCheckBox(
+            self.camera_controls_frame,
+            text="Flip Camera",
+            command=self.toggle_camera_flip,
+        )
+        self.flip_camera.grid(row=2, column=0, padx=5, pady=5)
+
+        # Bounds control frame - right side
+        self.bounds_frame = customtkinter.CTkFrame(self.tabview.tab("Webcam Image"))
+        self.bounds_frame.grid(row=0, column=2, columnspan=2, padx=5, pady=5)
+
+        # X, Y position controls
+        self.bound_pos_label = customtkinter.CTkLabel(
+            self.bounds_frame, text="Bounding Box Position (X, Y):"
+        )
+        self.bound_pos_label.grid(row=0, column=0, columnspan=2, padx=5, pady=2)
 
         self.x_center_scroller = customtkinter.CTkSlider(
-            self.tabview.tab("Webcam Image"),
+            self.bounds_frame,
+            width=200,
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
             to=int(self.frame_width),
         )
-        self.x_center_scroller.grid(row=1, column=0, padx=20, pady=10)
+        self.x_center_scroller.grid(row=1, column=0, padx=5, pady=2)
+
         self.y_center_scroller = customtkinter.CTkSlider(
-            self.tabview.tab("Webcam Image"),
+            self.bounds_frame,
+            width=200,
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
             to=int(self.frame_height),
         )
-        self.y_center_scroller.grid(row=2, column=0, padx=20, pady=10)
+        self.y_center_scroller.grid(row=1, column=1, padx=5, pady=2)
+
+        # Size controls
+        self.bound_size_label = customtkinter.CTkLabel(
+            self.bounds_frame, text="Bounding Box Size (Width, Height):"
+        )
+        self.bound_size_label.grid(row=2, column=0, columnspan=2, padx=5, pady=2)
 
         self.bound_width_scroller = customtkinter.CTkSlider(
-            self.tabview.tab("Webcam Image"),
+            self.bounds_frame,
+            width=200,
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
             to=int(self.frame_width * 2),
         )
-        self.bound_width_scroller.grid(row=1, column=1, padx=20, pady=10)
+        self.bound_width_scroller.grid(row=3, column=0, padx=5, pady=2)
+
         self.bound_height_scroller = customtkinter.CTkSlider(
-            self.tabview.tab("Webcam Image"),
+            self.bounds_frame,
+            width=200,
             command=self.set_element_size,
             progress_color="#4477AA",
             from_=0,
             to=int(self.frame_height * 2),
         )
-        self.bound_height_scroller.grid(row=2, column=1, padx=20, pady=10)
+        self.bound_height_scroller.grid(row=3, column=1, padx=5, pady=2)
 
+        # Camera view
         self.webcam_image_label = customtkinter.CTkLabel(
             self.tabview.tab("Webcam Image"), text="Webcam Image"
         )
-        self.webcam_image_label.grid(row=3, column=0, columnspan=2)
+        self.webcam_image_label.grid(row=4, column=0, columnspan=4, sticky="nsew")
+
+        # Camera control buttons - reversed order
         self.open_camera_btn = customtkinter.CTkButton(
             self.tabview.tab("Webcam Image"),
             text="Open Camera",
             command=self.open_camera,
+            width=100,
         )
-        self.open_camera_btn.grid(row=4, column=0)
+        self.open_camera_btn.grid(row=5, column=0, padx=5, pady=5)
         self.close_camera_btn = customtkinter.CTkButton(
             self.tabview.tab("Webcam Image"),
             text="Close Camera",
             state="disabled",
             command=self.close_camera,
+            width=100,
         )
-        self.close_camera_btn.grid(row=4, column=1)
+        self.close_camera_btn.grid(row=5, column=3, padx=5, pady=5)
 
         # ################################
         # ################################
@@ -948,8 +992,45 @@ class Holo(customtkinter.CTk):
     # Webcam Functions
     ################################
 
+    def list_available_cameras(self):
+        """Test and return available camera indices"""
+        available_ports = []
+        for i in range(4):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                if ret:
+                    available_ports.append(i)
+                cap.release()
+        return available_ports
+
+    def change_camera(self, selection):
+        """Change the active camera"""
+        if self.camera_running:
+            self.close_camera()
+        camera_index = int(selection.replace("Camera ", ""))
+        self.cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+
+    def toggle_camera_flip(self):
+        """Toggle camera flip state"""
+        self.flip_camera_enabled = self.flip_camera.get()
+
     def open_camera(self):
         if not self.camera_running:
+            if self.cap is None or not self.cap.isOpened():
+                # Try to open the currently selected camera
+                selected_camera = self.camera_select.get()
+                camera_index = int(selected_camera.replace("Camera ", ""))
+                self.cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+
+                if not self.cap.isOpened():
+                    print(f"Failed to open camera {camera_index}")
+                    return
+
             self.camera_running = True
             self.stop_event.clear()
             self.camera_thread = threading.Thread(target=self._camera_loop)
@@ -959,16 +1040,14 @@ class Holo(customtkinter.CTk):
             self.webcam_image_label.configure(text="")
 
     def _camera_loop(self):
-        # Variables for mouse control
+        # Remove camera initialization from here since it's handled in open_camera
         mouse_pressed = False
 
-        if not self.cap.isOpened():
-            self.cap = cv2.VideoCapture(2, cv2.CAP_DSHOW)
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
-
         while (
-            self.camera_running and self.cap.isOpened() and not self.stop_event.is_set()
+            self.camera_running
+            and self.cap is not None
+            and self.cap.isOpened()
+            and not self.stop_event.is_set()
         ):
             start_time = time.time()
 
@@ -976,6 +1055,9 @@ class Holo(customtkinter.CTk):
             ret, frame = self.cap.read()
             if not ret:
                 break
+
+            if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
+                frame = cv2.flip(frame, 1)
 
             # frame = cv2.flip(frame, 1)
             # Convert image from one color space to other
@@ -1093,21 +1175,23 @@ class Holo(customtkinter.CTk):
     def close_camera(self):
         self.camera_running = False
         self.stop_event.set()
-        self.open_camera_btn.configure(state="normal")
-        self.close_camera_btn.configure(state="disabled")
-        self.cap.release()
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
         cv2.destroyAllWindows()
+
+        # Recreate the webcam label
         self.webcam_image_label.destroy()
         self.webcam_image_label = customtkinter.CTkLabel(
             self.tabview.tab("Webcam Image"), text="Webcam Image"
         )
-        self.webcam_image_label.grid(row=3, column=0, columnspan=2)
-        self.webcam_image_label.configure(image=None)
-        self.webcam_image_label.configure(text="Webcam Image")
+        self.webcam_image_label.grid(row=4, column=0, columnspan=3, sticky="nsew")
+        self.open_camera_btn.configure(state="normal")
+        self.close_camera_btn.configure(state="disabled")
 
     def on_closing(self):
-        self.destroy()
         self.close_camera()
+        self.destroy()
 
     ################################
     # Helper functions
