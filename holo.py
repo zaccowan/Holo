@@ -30,6 +30,17 @@ import json
 import replicate
 import base64
 
+# # Add GPU support
+# import tensorflow as tf
+
+# gpus = tf.config.experimental.list_physical_devices("GPU")
+# if gpus:
+#     try:
+#         for gpu in gpus:
+#             tf.config.experimental.set_memory_growth(gpu, True)
+#     except RuntimeError as e:
+#         print(e)
+
 
 customtkinter.set_appearance_mode(
     "System"
@@ -210,13 +221,6 @@ class Holo(customtkinter.CTk):
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
 
-    hands = mp_hands.Hands(
-        static_image_mode=False,
-        max_num_hands=1,
-        min_detection_confidence=0.7,
-        min_tracking_confidence=0.7,
-    )
-
     canvas_text = None
 
     screen_width, screen_height = pyautogui.size()
@@ -233,6 +237,14 @@ class Holo(customtkinter.CTk):
         self.camera_thread = None
         self.camera_running = False
         self.stop_event = threading.Event()
+
+        self.hands = self.mp_hands.Hands(
+            static_image_mode=False,  # Already set correctly
+            max_num_hands=1,  # Already set correctly
+            min_detection_confidence=0.5,  # Lower this from 0.7
+            min_tracking_confidence=0.5,  # Lower this from 0.7
+            model_complexity=0,  # Add this - use simpler model
+        )
 
         # Smoothing parameters
         self.smoothing_window_size = 5
@@ -423,25 +435,55 @@ class Holo(customtkinter.CTk):
         self.tabview.add("Webcam Image")
 
         # Canvas Tab
-        self.canvas = customtkinter.CTkCanvas(
+        # Main Frame grid configuration
+        self.main_frame.grid_columnconfigure(0, weight=1)
+        self.main_frame.grid_rowconfigure(0, weight=1)
+
+        # Configure tab view grid weights
+        self.tabview.grid(row=0, column=0, padx=(20, 20), pady=(10, 10), sticky="nsew")
+        self.tabview.tab("Canvas").grid_columnconfigure(
+            0, weight=3
+        )  # Give more weight to canvas
+        self.tabview.tab("Canvas").grid_columnconfigure(
+            3, weight=1
+        )  # Less weight for layer panel
+        self.tabview.tab("Canvas").grid_rowconfigure(
+            1, weight=1
+        )  # Make canvas row expandable
+
+        # Canvas Frame with dynamic sizing
+        self.canvas_frame = customtkinter.CTkFrame(
             self.tabview.tab("Canvas"),
-            width=1280,
-            height=720,
+            fg_color="transparent",
+        )
+        self.canvas_frame.grid(
+            row=1, column=0, columnspan=3, sticky="nsew", padx=10, pady=10
+        )
+        self.canvas_frame.grid_columnconfigure(0, weight=1)
+        self.canvas_frame.grid_rowconfigure(0, weight=1)
+
+        # Create canvas with dynamic sizing
+        self.canvas = customtkinter.CTkCanvas(
+            self.canvas_frame,
             bg="white",
             cursor="circle",
+            highlightthickness=0,
         )
+        self.canvas.place(relx=0.5, rely=0.5, anchor="center", width=1280, height=720)
+        # self.canvas.grid(row=0, column=0)
 
-        self.tabview.tab("Canvas").grid_columnconfigure((0, 1, 2), weight=1)
-        self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
-        self.canvas.grid(row=1, column=0, columnspan=3)
+        # Bind resize event
+        self.bind("<Configure>", self.on_window_resize)
 
-        # Add transform controls above canvas
+        # Canvas Mouse Events
+        self.canvas.bind("<Button-1>", self.canvas_mouse_down)
+        self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
+        self.canvas.bind("<Motion>", self.mouse_move)
+
+        # Create transform controls container but don't show it initially
         self.transform_controls = customtkinter.CTkFrame(self.tabview.tab("Canvas"))
-        self.transform_controls.grid(
-            row=0, column=0, columnspan=3, sticky="ew", pady=(0, 5)
-        )
 
-        # Create transform mode buttons (remove rotate button)
+        # Create transform mode buttons
         self.transform_mode = tkinter.StringVar(value="move")
 
         self.move_btn = customtkinter.CTkButton(
@@ -461,14 +503,6 @@ class Holo(customtkinter.CTk):
             fg_color="transparent",
         )
         self.scale_btn.grid(row=0, column=1, padx=5, pady=5)
-
-        # Move canvas to row 1
-        self.canvas.grid(row=1, column=0, columnspan=3)
-
-        # Canvas Mouse Events
-        self.canvas.bind("<Button-1>", self.canvas_mouse_down)
-        self.canvas.bind("<ButtonRelease-1>", self.canvas_mouse_release)
-        self.canvas.bind("<Motion>", self.mouse_move)
 
         # Generation and Saving Buttons
         self.prompt_entry = customtkinter.CTkEntry(
@@ -686,66 +720,56 @@ class Holo(customtkinter.CTk):
     def set_element_size(self, event):
         self.element_size = int(self.element_size_slider.get())
         self.element_size_label.configure(text=f"Element Size: {self.element_size}")
-        self._update_size_preview(self.element_size)  # Update preview when size changes
-
-    def _update_size_preview(self, size):
-        """Update the size preview circle"""
-        self.size_preview.delete("all")
-
-        # Get canvas dimensions
-        canvas_width = 50
-        canvas_height = 50
-
-        # Calculate center point
-        center_x = canvas_width // 2
-        center_y = canvas_height // 2
-
-        # Draw actual size circle
-        radius = int(size) / 2
-
-        # If circle would be too big, scale it down
-        max_radius = min(canvas_width, canvas_height) / 2 - 2
-        if radius > max_radius:
-            scale_factor = max_radius / radius
-            displayed_radius = max_radius
-            # Add text to show actual size
-            self.size_preview.create_text(
-                center_x,
-                canvas_height - 5,
-                text=f"×{int(size)}",
-                fill="black",
-                font=("Arial", 8),
-            )
-        else:
-            displayed_radius = radius
-
-        # Draw the circle
-        self.size_preview.create_oval(
-            center_x - displayed_radius,
-            center_y - displayed_radius,
-            center_x + displayed_radius,
-            center_y + displayed_radius,
-            fill=self.hex_color,
-            outline=self.hex_color,
-        )
 
     def set_active_tool(self, *args):
         self.active_tool = self.tool_dict.get(self.radio_tool_var.get())
         match self.active_tool:
             case "Circle Brush":
                 self.canvas.configure(cursor="circle")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
             case "Rectangle Tool":
                 self.canvas.configure(cursor="tcross")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
             case "Fill Tool":
                 self.canvas.configure(cursor="spraycan")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
             case "Text Tool":
                 self.canvas.configure(cursor="xterm")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
             case "Transform Tool":
                 self.canvas.configure(cursor="fleur")
+                # Show transform controls
+                self.transform_controls.grid(
+                    row=0, column=0, columnspan=3, sticky="ew", pady=(0, 5)
+                )
+                # Initialize transform state
+                self.transform_mode = "move"
+                self.move_btn.configure(fg_color="#4477AA")
+                self.scale_btn.configure(fg_color="transparent")
+
             case "Delete Tool":
                 self.canvas.configure(cursor="X_cursor")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
             case "Image Tool":
                 self.canvas.configure(cursor="plus")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
 
     def open_text_entry_window(self):
         if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
@@ -1274,8 +1298,8 @@ class Holo(customtkinter.CTk):
             self.webcam_image_label.configure(text="")
 
     def _camera_loop(self):
-        # Remove camera initialization from here since it's handled in open_camera
         mouse_pressed = False
+        process_this_frame = True  # Add frame skip counter
 
         while (
             self.camera_running
@@ -1284,19 +1308,34 @@ class Holo(customtkinter.CTk):
             and not self.stop_event.is_set()
         ):
             start_time = time.time()
-
-            # Capture the video frame by frame
             ret, frame = self.cap.read()
             if not ret:
                 break
 
-            if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
-                frame = cv2.flip(frame, 1)
+            # Process every other frame
+            if process_this_frame:
+                # Resize frame for faster processing
+                small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
 
-            # frame = cv2.flip(frame, 1)
-            # Convert image from one color space to other
-            opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = self.hands.process(opencv_image)
+                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
+                    small_frame = cv2.flip(small_frame, 1)
+
+                # Convert and process
+                opencv_image = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+                results = self.hands.process(opencv_image)
+
+                # Scale back up for display
+                opencv_image = cv2.resize(
+                    opencv_image, (self.frame_width, self.frame_height)
+                )
+            else:
+                # Just flip if needed without processing
+                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
+                    frame = cv2.flip(frame, 1)
+                opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            process_this_frame = not process_this_frame  # Toggle for next frame
+
             current_click = False
 
             bounding_center_x = self.x_center_scroller.get()
@@ -1582,6 +1621,29 @@ class Holo(customtkinter.CTk):
 
         # Update mouse position for next frame
         self.mouse_down_canvas_coords = (event.x, event.y)
+
+    def on_window_resize(self, event):
+        """Handle window resize events"""
+        if event.widget == self:
+            # Get the available space
+            frame_width = self.canvas_frame.winfo_width()
+            frame_height = self.canvas_frame.winfo_height()
+
+            # Maintain aspect ratio (16:9)
+            aspect_ratio = 16 / 9
+
+            # Calculate new dimensions maintaining aspect ratio
+            if frame_width / frame_height > aspect_ratio:
+                # Width is too wide, constrain by height
+                new_height = frame_height
+                new_width = int(new_height * aspect_ratio)
+            else:
+                # Height is too tall, constrain by width
+                new_width = frame_width
+                new_height = int(new_width / aspect_ratio)
+
+            # Configure canvas size
+            self.canvas.configure(width=new_width, height=new_height)
 
 
 if __name__ == "__main__":
