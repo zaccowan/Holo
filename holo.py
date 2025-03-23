@@ -892,6 +892,17 @@ class Holo(customtkinter.CTk):
         # Bind click event to select the stroke
         layer_label.bind("<Button-1>", lambda e, tag=stroke_tag: self.select_layer(tag))
 
+        # Add edit button
+        edit_button = customtkinter.CTkButton(
+            layer_frame,
+            text="Edit",
+            width=60,
+            height=24,
+            command=lambda t=stroke_tag: self.edit_layer_color(t),
+        )
+        edit_button.grid(row=0, column=1, pady=2, padx=2)
+
+        # Delete button now in column 2
         delete_button = customtkinter.CTkButton(
             layer_frame,
             text="Delete",
@@ -899,11 +910,12 @@ class Holo(customtkinter.CTk):
             height=24,
             command=lambda t=stroke_tag: self.delete_layer(t),
         )
-        delete_button.grid(row=0, column=1, pady=2, padx=5)
+        delete_button.grid(row=0, column=2, pady=2, padx=2)
 
         self.layer_buttons[stroke_tag] = {
             "frame": layer_frame,
             "label": layer_label,
+            "edit_button": edit_button,
             "delete_button": delete_button,
         }
 
@@ -931,37 +943,73 @@ class Holo(customtkinter.CTk):
             layer_info["frame"].grid(row=idx, column=0, pady=2, padx=5, sticky="ew")
 
     def select_layer(self, stroke_tag):
-        # Reset previous selections
-        for layer_info in self.layer_buttons.values():
-            layer_info["frame"].configure(fg_color=("gray86", "gray17"))
-            layer_info["label"].configure(fg_color=("gray86", "gray17"))
-
-        # Highlight selected layer
-        self.layer_buttons[stroke_tag]["frame"].configure(
-            fg_color=("#4477AA", "#4477AA")
-        )
-        self.layer_buttons[stroke_tag]["label"].configure(
-            fg_color=("#4477AA", "#4477AA")
-        )
-
-        # Set transform tool as active
-        self.radio_tool_var.set(4)  # Index for Transform Tool
-        self.transform_active = True
-        self.transform_tags = [stroke_tag]
-
-        # Show bounding box for selected stroke
-        self.canvas.delete("temp_bbox")
-        bbox = self.canvas.bbox(stroke_tag)
-        if bbox:
-            self.canvas.create_rectangle(
-                bbox[0] - 20,
-                bbox[1] - 20,
-                bbox[2] + 20,
-                bbox[3] + 20,
-                outline="#555555",
-                width=5,
-                tags="temp_bbox",
+        # Check if layer is already selected
+        if hasattr(self, "selected_layer") and self.selected_layer == stroke_tag:
+            # Layer is already selected, show color picker
+            color_code = colorchooser.askcolor(
+                title="Choose stroke color",
+                color=self.canvas.itemcget(stroke_tag, "fill"),
             )
+            if color_code:
+                # Update the stroke color
+                if "brush" in stroke_tag or "rect" in stroke_tag:
+                    self.canvas.itemconfig(stroke_tag, fill=color_code[1])
+                    if "rect" in stroke_tag:
+                        self.canvas.itemconfig(stroke_tag, outline=color_code[1])
+                elif "text" in stroke_tag:
+                    self.canvas.itemconfig(stroke_tag, fill=color_code[1])
+                elif "fill" in stroke_tag:
+                    self.canvas.itemconfig(stroke_tag, fill=color_code[1])
+        else:
+            # Reset previous selections
+            for layer_info in self.layer_buttons.values():
+                layer_info["frame"].configure(fg_color=("gray86", "gray17"))
+                layer_info["label"].configure(fg_color=("gray86", "gray17"))
+
+            # Highlight selected layer
+            self.layer_buttons[stroke_tag]["frame"].configure(
+                fg_color=("#4477AA", "#4477AA")
+            )
+            self.layer_buttons[stroke_tag]["label"].configure(
+                fg_color=("#4477AA", "#4477AA")
+            )
+
+            # Set transform tool as active
+            self.radio_tool_var.set(4)  # Index for Transform Tool
+            self.transform_active = True
+            self.transform_tags = [stroke_tag]
+            self.selected_layer = stroke_tag
+
+            # Show bounding box for selected stroke
+            self.canvas.delete("temp_bbox")
+            bbox = self.canvas.bbox(stroke_tag)
+            if bbox:
+                self.canvas.create_rectangle(
+                    bbox[0] - 20,
+                    bbox[1] - 20,
+                    bbox[2] + 20,
+                    bbox[3] + 20,
+                    outline="#555555",
+                    width=5,
+                    tags="temp_bbox",
+                )
+
+    def edit_layer_color(self, stroke_tag):
+        """Edit the color of a layer"""
+        color_code = colorchooser.askcolor(
+            title="Choose stroke color",
+            color=self.canvas.itemcget(stroke_tag, "fill"),
+        )
+        if color_code:
+            # Update the stroke color based on type
+            if "brush" in stroke_tag or "rect" in stroke_tag:
+                self.canvas.itemconfig(stroke_tag, fill=color_code[1])
+                if "rect" in stroke_tag:
+                    self.canvas.itemconfig(stroke_tag, outline=color_code[1])
+            elif "text" in stroke_tag:
+                self.canvas.itemconfig(stroke_tag, fill=color_code[1])
+            elif "fill" in stroke_tag:
+                self.canvas.itemconfig(stroke_tag, fill=color_code[1])
 
     ################################
     # Canvas Saving and AI Generation
