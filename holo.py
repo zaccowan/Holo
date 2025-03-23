@@ -433,7 +433,37 @@ class Holo(customtkinter.CTk):
 
         self.tabview.tab("Canvas").grid_columnconfigure((0, 1, 2), weight=1)
         self.tabview.tab("Canvas").grid_rowconfigure(0, weight=1)
-        self.canvas.grid(row=0, column=0, columnspan=3)
+        self.canvas.grid(row=1, column=0, columnspan=3)
+
+        # Add transform controls above canvas
+        self.transform_controls = customtkinter.CTkFrame(self.tabview.tab("Canvas"))
+        self.transform_controls.grid(
+            row=0, column=0, columnspan=3, sticky="ew", pady=(0, 5)
+        )
+
+        # Create transform mode buttons (remove rotate button)
+        self.transform_mode = tkinter.StringVar(value="move")
+
+        self.move_btn = customtkinter.CTkButton(
+            self.transform_controls,
+            text="Move",
+            width=100,
+            command=lambda: self.set_transform_mode("move"),
+            fg_color="#4477AA",
+        )
+        self.move_btn.grid(row=0, column=0, padx=5, pady=5)
+
+        self.scale_btn = customtkinter.CTkButton(
+            self.transform_controls,
+            text="Scale",
+            width=100,
+            command=lambda: self.set_transform_mode("scale"),
+            fg_color="transparent",
+        )
+        self.scale_btn.grid(row=0, column=1, padx=5, pady=5)
+
+        # Move canvas to row 1
+        self.canvas.grid(row=1, column=0, columnspan=3)
 
         # Canvas Mouse Events
         self.canvas.bind("<Button-1>", self.canvas_mouse_down)
@@ -656,6 +686,48 @@ class Holo(customtkinter.CTk):
     def set_element_size(self, event):
         self.element_size = int(self.element_size_slider.get())
         self.element_size_label.configure(text=f"Element Size: {self.element_size}")
+        self._update_size_preview(self.element_size)  # Update preview when size changes
+
+    def _update_size_preview(self, size):
+        """Update the size preview circle"""
+        self.size_preview.delete("all")
+
+        # Get canvas dimensions
+        canvas_width = 50
+        canvas_height = 50
+
+        # Calculate center point
+        center_x = canvas_width // 2
+        center_y = canvas_height // 2
+
+        # Draw actual size circle
+        radius = int(size) / 2
+
+        # If circle would be too big, scale it down
+        max_radius = min(canvas_width, canvas_height) / 2 - 2
+        if radius > max_radius:
+            scale_factor = max_radius / radius
+            displayed_radius = max_radius
+            # Add text to show actual size
+            self.size_preview.create_text(
+                center_x,
+                canvas_height - 5,
+                text=f"×{int(size)}",
+                fill="black",
+                font=("Arial", 8),
+            )
+        else:
+            displayed_radius = radius
+
+        # Draw the circle
+        self.size_preview.create_oval(
+            center_x - displayed_radius,
+            center_y - displayed_radius,
+            center_x + displayed_radius,
+            center_y + displayed_radius,
+            fill=self.hex_color,
+            outline=self.hex_color,
+        )
 
     def set_active_tool(self, *args):
         self.active_tool = self.tool_dict.get(self.radio_tool_var.get())
@@ -749,11 +821,64 @@ class Holo(customtkinter.CTk):
                             )
                     case "Transform Tool":
                         if self.transform_active:
-                            dx = event.x - self.mouse_down_canvas_coords[0]
-                            dy = event.y - self.mouse_down_canvas_coords[1]
-                            for tag in self.transform_tags:
-                                self.canvas.move(tag, dx, dy)
-                            self.canvas.move("temp_bbox", dx, dy)
+                            match self.transform_mode:
+                                case "move":
+                                    dx = event.x - self.mouse_down_canvas_coords[0]
+                                    dy = event.y - self.mouse_down_canvas_coords[1]
+                                    for tag in self.transform_tags:
+                                        self.canvas.move(tag, dx, dy)
+                                    self.canvas.move("temp_bbox", dx, dy)
+
+                                case "scale":
+                                    for tag in self.transform_tags:
+                                        bbox = self.canvas.bbox(tag)
+                                        if bbox:
+                                            center_x = (bbox[0] + bbox[2]) / 2
+                                            center_y = (bbox[1] + bbox[3]) / 2
+
+                                            # Calculate distance from center
+                                            current_dist = math.sqrt(
+                                                (event.x - center_x) ** 2
+                                                + (event.y - center_y) ** 2
+                                            )
+                                            start_dist = math.sqrt(
+                                                (
+                                                    self.mouse_down_canvas_coords[0]
+                                                    - center_x
+                                                )
+                                                ** 2
+                                                + (
+                                                    self.mouse_down_canvas_coords[1]
+                                                    - center_y
+                                                )
+                                                ** 2
+                                            )
+
+                                            if start_dist > 0:
+                                                scale = current_dist / start_dist
+                                                scale = max(0.1, min(scale, 5.0))
+                                                self.canvas.scale(
+                                                    tag,
+                                                    center_x,
+                                                    center_y,
+                                                    scale,
+                                                    scale,
+                                                )
+
+                                                # Update bounding box
+                                                self.canvas.delete("temp_bbox")
+                                                new_bbox = self.canvas.bbox(tag)
+                                                if new_bbox:
+                                                    self.canvas.create_rectangle(
+                                                        new_bbox[0] - 20,
+                                                        new_bbox[1] - 20,
+                                                        new_bbox[2] + 20,
+                                                        new_bbox[3] + 20,
+                                                        outline="#555555",
+                                                        width=5,
+                                                        tags="temp_bbox",
+                                                    )
+
                             self.mouse_down_canvas_coords = (event.x, event.y)
                         else:
                             self.update_temp_bbox(event)
@@ -892,17 +1017,30 @@ class Holo(customtkinter.CTk):
         # Bind click event to select the stroke
         layer_label.bind("<Button-1>", lambda e, tag=stroke_tag: self.select_layer(tag))
 
-        # Add edit button
-        edit_button = customtkinter.CTkButton(
-            layer_frame,
-            text="Edit",
-            width=60,
-            height=24,
-            command=lambda t=stroke_tag: self.edit_layer_color(t),
-        )
-        edit_button.grid(row=0, column=1, pady=2, padx=2)
+        # Dictionary to store buttons for managing references
+        buttons = {}
 
-        # Delete button now in column 2
+        # Only add edit button for elements that can have their color changed
+        # Exclude images from getting edit button
+        next_column = 1
+        if tool_type in [
+            "brush",
+            "rect",
+            "fill",
+            "text",
+        ]:  # Removed 'image' from this list
+            edit_button = customtkinter.CTkButton(
+                layer_frame,
+                text="Edit",
+                width=60,
+                height=24,
+                command=lambda t=stroke_tag: self.edit_layer_color(t),
+            )
+            edit_button.grid(row=0, column=next_column, pady=2, padx=2)
+            buttons["edit_button"] = edit_button
+            next_column += 1
+
+        # Delete button always appears
         delete_button = customtkinter.CTkButton(
             layer_frame,
             text="Delete",
@@ -910,13 +1048,14 @@ class Holo(customtkinter.CTk):
             height=24,
             command=lambda t=stroke_tag: self.delete_layer(t),
         )
-        delete_button.grid(row=0, column=2, pady=2, padx=2)
+        delete_button.grid(row=0, column=next_column, pady=2, padx=2)
+        buttons["delete_button"] = delete_button
 
+        # Store all components in the layer_buttons dictionary
         self.layer_buttons[stroke_tag] = {
             "frame": layer_frame,
             "label": layer_label,
-            "edit_button": edit_button,
-            "delete_button": delete_button,
+            **buttons,  # Unpack the buttons dictionary
         }
 
     def delete_layer(self, stroke_tag):
@@ -1386,6 +1525,63 @@ class Holo(customtkinter.CTk):
         prefix = tool_prefix.get(tool_name, "element")
         self.tool_counters[prefix] += 1
         return f"{prefix}_{self.tool_counters[prefix]}"
+
+    def set_transform_mode(self, mode):
+        """Set the current transform mode and update button appearances"""
+        self.transform_mode = mode
+
+        # Update button colors (remove rotate from buttons dictionary)
+        buttons = {"move": self.move_btn, "scale": self.scale_btn}
+
+        for btn_mode, btn in buttons.items():
+            if btn_mode == mode:
+                btn.configure(fg_color="#4477AA")
+            else:
+                btn.configure(fg_color="transparent")
+
+    def transform_element(self, event):
+        """Handle element transformation based on current mode"""
+        if not self.transform_active or not self.transform_tags:
+            return
+
+        match self.transform_mode:
+            case "move":
+                # Existing move logic
+                dx = event.x - self.mouse_down_canvas_coords[0]
+                dy = event.y - self.mouse_down_canvas_coords[1]
+                for tag in self.transform_tags:
+                    self.canvas.move(tag, dx, dy)
+                self.canvas.move("temp_bbox", dx, dy)
+
+            case "scale":
+                # Scale from center
+                for tag in self.transform_tags:
+                    bbox = self.canvas.bbox(tag)
+                    if bbox:
+                        center_x = (bbox[0] + bbox[2]) / 2
+                        center_y = (bbox[1] + bbox[3]) / 2
+
+                        # Prevent division by zero and invalid scaling
+                        try:
+                            dx = event.x - center_x
+                            dy = event.y - center_y
+                            old_dx = self.mouse_down_canvas_coords[0] - center_x
+                            old_dy = self.mouse_down_canvas_coords[1] - center_y
+
+                            # Calculate distance ratios for scaling
+                            new_dist = math.sqrt(dx * dx + dy * dy)
+                            old_dist = math.sqrt(old_dx * old_dx + old_dy * old_dy)
+
+                            if old_dist > 0:  # Prevent division by zero
+                                scale = new_dist / old_dist
+                                # Limit scale factor to reasonable range
+                                scale = max(0.1, min(scale, 10.0))
+                                self.canvas.scale(tag, center_x, center_y, scale, scale)
+                        except (ZeroDivisionError, ValueError):
+                            pass  # Skip scaling if calculations are invalid
+
+        # Update mouse position for next frame
+        self.mouse_down_canvas_coords = (event.x, event.y)
 
 
 if __name__ == "__main__":
