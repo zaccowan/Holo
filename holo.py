@@ -188,6 +188,7 @@ class Holo(customtkinter.CTk):
         3: "Text Tool",
         4: "Transform Tool",
         5: "Delete Tool",
+        6: "Image Tool",  # Add this line
     }
     active_tool = "Circle Brush"
     mouse_active_coords = {
@@ -241,7 +242,7 @@ class Holo(customtkinter.CTk):
         # configure window
         self.title("Holo")
         self.geometry(f"{1280}x{720}")
-        self.bind("<Escape>", lambda e: app.quit())
+        self.bind("<Escape>", lambda e: self.on_closing())
 
         # Override the protocol method to detect window close
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -371,6 +372,13 @@ class Holo(customtkinter.CTk):
             text="Delete Tool",
         )
         self.radio_button_6.grid(row=6, column=0, pady=10, padx=20, sticky="nsew")
+        self.radio_button_7 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=6,
+            text="Image Tool",
+        )
+        self.radio_button_7.grid(row=7, column=0, pady=10, padx=20, sticky="nsew")
 
         self.appearance_mode_label = customtkinter.CTkLabel(
             self.sidebar_frame, text="Appearance Mode:", anchor="w"
@@ -617,6 +625,9 @@ class Holo(customtkinter.CTk):
         self.appearance_mode_optionemenu.set("Dark")
         self.scaling_optionemenu.set("100%")
 
+        # Initialize tool-specific counters
+        self.tool_counters = {"brush": 0, "rect": 0, "fill": 0, "text": 0, "image": 0}
+
     ########################################################################################################################################################
     ########################################################################################################################################################
     # End of init ##########################################################################################################################################
@@ -661,8 +672,8 @@ class Holo(customtkinter.CTk):
                 self.canvas.configure(cursor="fleur")
             case "Delete Tool":
                 self.canvas.configure(cursor="X_cursor")
-
-        # print(self.active_tool)
+            case "Image Tool":
+                self.canvas.configure(cursor="plus")
 
     def open_text_entry_window(self):
         if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
@@ -677,20 +688,21 @@ class Holo(customtkinter.CTk):
 
     def set_canvas_text(self, entry_text):
         self.canvas_text = entry_text
+        stroke_tag = self.get_stroke_tag("Text Tool")
         self.canvas.create_text(
             self.mouse_release_canvas_coords[0],
             self.mouse_release_canvas_coords[1],
             text=entry_text,
             font=customtkinter.CTkFont(size=self.element_size),
+            tags=stroke_tag,
         )
-        # print(self.canvas_text)
+        self.add_layer_to_panel(stroke_tag)
 
     ################################
     # Canvas Mouse Events
     ################################
 
     def mouse_move(self, event):
-        # Clear any temporary rectangles draw by delete or transform tool
         self.canvas.delete("temp_bbox")
         if self.mouse_down:
             self.mouse_active_coords["previous"] = self.mouse_active_coords["current"]
@@ -703,6 +715,13 @@ class Holo(customtkinter.CTk):
             ):
                 match self.active_tool:
                     case "Circle Brush":
+                        # Get stroke tag only once when starting a new stroke
+                        if not hasattr(self, "current_brush_tag"):
+                            self.current_brush_tag = self.get_stroke_tag(
+                                self.active_tool
+                            )
+                            self.add_layer_to_panel(self.current_brush_tag)
+
                         self.canvas.create_line(
                             self.mouse_active_coords["previous"][0],
                             self.mouse_active_coords["previous"][1],
@@ -713,7 +732,7 @@ class Holo(customtkinter.CTk):
                             capstyle=tkinter.ROUND,
                             smooth=True,
                             splinesteps=36,
-                            tags="brush_stroke" + str(self.stroke_counter),
+                            tags=self.current_brush_tag,
                         )
                     case "Rectangle Tool":
                         self.temp_rect = None
@@ -767,20 +786,11 @@ class Holo(customtkinter.CTk):
                 )
 
     def canvas_mouse_down(self, event):
-        if self.active_tool != "Transform Tool":
-            self.stroke_counter += 1
         self.mouse_down = True
         self.mouse_down_canvas_coords = (event.x, event.y)
+        # Initialize current position for brush strokes
+        self.mouse_active_coords["current"] = (event.x, event.y)
         match self.active_tool:
-            case "Fill Tool":
-                self.canvas.create_rectangle(
-                    0,
-                    0,
-                    self.canvas.winfo_width(),
-                    self.canvas.winfo_height(),
-                    fill=self.hex_color,
-                    tags="brush_stroke" + str(self.stroke_counter),
-                )
             case "Transform Tool":
                 item = self.canvas.find_closest(event.x, event.y)[0]
                 tag = self.canvas.gettags(item)
@@ -810,12 +820,16 @@ class Holo(customtkinter.CTk):
         self.mouse_active_coords["current"] = None
         self.mouse_release_canvas_coords = (event.x, event.y)
 
+        # Clear brush tag when stroke is complete
+        if hasattr(self, "current_brush_tag"):
+            delattr(self, "current_brush_tag")
+
         match self.active_tool:
             case "Circle Brush":
-                # Add the new stroke to the layer panel
-                self.add_layer_to_panel(f"brush_stroke{self.stroke_counter}")
+                pass
             case "Rectangle Tool":
                 self.canvas.delete("temp_rect")
+                stroke_tag = self.get_stroke_tag(self.active_tool)
                 self.canvas.create_rectangle(
                     self.mouse_down_canvas_coords[0],
                     self.mouse_down_canvas_coords[1],
@@ -824,20 +838,34 @@ class Holo(customtkinter.CTk):
                     width=self.element_size,
                     fill=str(self.hex_color),
                     outline=str(self.hex_color),
-                    tags="brush_stroke" + str(self.stroke_counter),
+                    tags=stroke_tag,
                 )
-                # Add the new rectangle to the layer panel
-                self.add_layer_to_panel(f"brush_stroke{self.stroke_counter}")
+                self.add_layer_to_panel(stroke_tag)
             case "Text Tool":
                 self.open_text_entry_window()
             case "Delete Tool":
                 self.canvas.delete("temp_bbox")
                 item = self.canvas.find_closest(event.x, event.y)[0]
                 tag = self.canvas.gettags(item)
-                if tag and tag[0].startswith(
-                    "brush_stroke"
-                ):  # Ensure it's a brush stroke
+                if tag and "_" in tag[0]:  # Check for any valid element tag
                     self.delete_layer(tag[0])
+            case "Image Tool":
+                file_path = filedialog.askopenfilename(
+                    filetypes=[("Image files", "*.png *.jpg *.jpeg *.gif *.bmp *.tiff")]
+                )
+                if file_path:
+                    self.place_image(file_path, event.x, event.y)
+            case "Fill Tool":
+                stroke_tag = self.get_stroke_tag(self.active_tool)
+                self.canvas.create_rectangle(
+                    0,
+                    0,
+                    self.canvas.winfo_width(),
+                    self.canvas.winfo_height(),
+                    fill=self.hex_color,
+                    tags=stroke_tag,
+                )
+                self.add_layer_to_panel(stroke_tag)
 
     ################################
     # Layer Window
@@ -849,10 +877,14 @@ class Holo(customtkinter.CTk):
         )
         layer_frame.grid_columnconfigure(0, weight=1)
 
+        # Create more descriptive label
+        tool_type, number = stroke_tag.split("_")
+        label_text = f"{tool_type.capitalize()} {number}"
+
         # Make the label clickable and highlight on hover
         layer_label = customtkinter.CTkLabel(
             layer_frame,
-            text=f"Stroke {stroke_tag.replace('brush_stroke', '')}",
+            text=label_text,
             cursor="hand2",
         )
         layer_label.grid(row=0, column=0, pady=2, padx=5, sticky="w")
@@ -876,9 +908,27 @@ class Holo(customtkinter.CTk):
         }
 
     def delete_layer(self, stroke_tag):
+        """Delete a layer and update counters"""
+        # Delete the stroke from canvas
         self.canvas.delete(stroke_tag)
-        self.layer_buttons[stroke_tag].destroy()
-        del self.layer_buttons[stroke_tag]
+
+        # Update the counter for the tool type
+        tool_type, number = stroke_tag.split("_")
+        if tool_type in self.tool_counters:
+            self.tool_counters[tool_type] = max(
+                self.tool_counters[tool_type], int(number)
+            )
+
+        # Delete the UI components
+        if stroke_tag in self.layer_buttons:
+            layer_info = self.layer_buttons[stroke_tag]
+            layer_info["frame"].destroy()
+            del self.layer_buttons[stroke_tag]
+            self._reposition_layers()
+
+    def _reposition_layers(self):
+        for idx, (tag, layer_info) in enumerate(self.layer_buttons.items()):
+            layer_info["frame"].grid(row=idx, column=0, pady=2, padx=5, sticky="ew")
 
     def select_layer(self, stroke_tag):
         # Reset previous selections
@@ -993,7 +1043,6 @@ class Holo(customtkinter.CTk):
     ################################
 
     def list_available_cameras(self):
-        """Test and return available camera indices"""
         available_ports = []
         for i in range(4):
             cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
@@ -1005,7 +1054,6 @@ class Holo(customtkinter.CTk):
         return available_ports
 
     def change_camera(self, selection):
-        """Change the active camera"""
         if self.camera_running:
             self.close_camera()
         camera_index = int(selection.replace("Camera ", ""))
@@ -1014,7 +1062,6 @@ class Holo(customtkinter.CTk):
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
 
     def toggle_camera_flip(self):
-        """Toggle camera flip state"""
         self.flip_camera_enabled = self.flip_camera.get()
 
     def open_camera(self):
@@ -1109,7 +1156,7 @@ class Holo(customtkinter.CTk):
                     2,
                 )
 
-                if distance < 0.05:  # Threshold for "OK" gesture
+                if distance < 0.1:  # Threshold for "OK" gesture
                     current_click = True
 
                 mouse_x = np.interp(
@@ -1190,7 +1237,33 @@ class Holo(customtkinter.CTk):
         self.close_camera_btn.configure(state="disabled")
 
     def on_closing(self):
-        self.close_camera()
+        if hasattr(self, "camera_running") and self.camera_running:
+            # Stop the camera loop
+            self.camera_running = False
+            self.stop_event.set()
+
+            # Wait for camera thread to finish
+            if self.camera_thread and self.camera_thread.is_alive():
+                self.camera_thread.join(timeout=1.0)
+
+            # Release camera resources
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+                self.cap = None
+
+            # Cleanup OpenCV windows
+            cv2.destroyAllWindows()
+
+            # Reset camera-related variables
+            self.camera_thread = None
+            self.webcam_image_label.configure(text="Camera Off")
+
+        # Clean up MediaPipe resources
+        if hasattr(self, "hands"):
+            self.hands.close()
+
+        # Destroy the window
+        self.quit()
         self.destroy()
 
     ################################
@@ -1209,6 +1282,62 @@ class Holo(customtkinter.CTk):
 
         # Convert the 0-1 range into a value in the right range.
         return rightMin + (valueScaled * rightSpan)
+
+    def place_image(self, file_path, x, y):
+        """Place an image on the canvas centered at the click position"""
+        # Load and convert the image
+        image = Image.open(file_path)
+
+        # Calculate scaling to fit canvas while maintaining aspect ratio
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        img_width, img_height = image.size
+
+        # Calculate scale factor
+        width_ratio = canvas_width / img_width
+        height_ratio = canvas_height / img_height
+        scale_factor = min(width_ratio, height_ratio) * 0.8  # 80% of max size
+
+        # Scale image
+        new_width = int(img_width * scale_factor)
+        new_height = int(img_height * scale_factor)
+        image = image.resize((new_width, new_height), Image.LANCZOS)
+
+        # Convert to PhotoImage
+        photo = ImageTk.PhotoImage(image)
+
+        # Calculate centered position
+        x_centered = x - (new_width // 2)
+        y_centered = y - (new_height // 2)
+
+        # Create image on canvas
+        stroke_tag = self.get_stroke_tag(self.active_tool)
+        image_id = self.canvas.create_image(
+            x_centered,
+            y_centered,
+            image=photo,
+            anchor="nw",
+            tags=stroke_tag,
+        )
+
+        # Keep reference to prevent garbage collection
+        self.canvas.photo = photo
+
+        # Add to layer panel
+        self.add_layer_to_panel(stroke_tag)
+
+    def get_stroke_tag(self, tool_name):
+        """Generate a tag based on the tool and its specific counter"""
+        tool_prefix = {
+            "Circle Brush": "brush",
+            "Rectangle Tool": "rect",
+            "Fill Tool": "fill",
+            "Text Tool": "text",
+            "Image Tool": "image",
+        }
+        prefix = tool_prefix.get(tool_name, "element")
+        self.tool_counters[prefix] += 1
+        return f"{prefix}_{self.tool_counters[prefix]}"
 
 
 if __name__ == "__main__":
