@@ -1,12 +1,14 @@
 # Imports for GUI library and styling system
+import base64
 import os
+from dotenv import load_dotenv
 import sys
 import tkinter
 import tkinter.messagebox
 import tkinter.ttk
 import customtkinter
 from tkinter import colorchooser, filedialog
-from PIL import ImageGrab, Image, ImageTk
+from PIL import ImageGrab, Image, ImageTk, ImageOps
 import ctypes
 import time
 import collections
@@ -28,18 +30,6 @@ import json
 
 ## Import for AI Image Generation
 import replicate
-import base64
-
-# # Add GPU support
-# import tensorflow as tf
-
-# gpus = tf.config.experimental.list_physical_devices("GPU")
-# if gpus:
-#     try:
-#         for gpu in gpus:
-#             tf.config.experimental.set_memory_growth(gpu, True)
-#     except RuntimeError as e:
-#         print(e)
 
 
 customtkinter.set_appearance_mode(
@@ -230,6 +220,8 @@ class Holo(customtkinter.CTk):
 
     def __init__(self):
         super().__init__()
+
+        load_dotenv()
 
         self.cap = None  # Initialize as None instead of with specific index
         self.frame_width, self.frame_height = 1280, 720
@@ -470,7 +462,6 @@ class Holo(customtkinter.CTk):
             highlightthickness=0,
         )
         self.canvas.place(relx=0.5, rely=0.5, anchor="center", width=1280, height=720)
-        # self.canvas.grid(row=0, column=0)
 
         # Bind resize event
         self.bind("<Configure>", self.on_window_resize)
@@ -537,10 +528,11 @@ class Holo(customtkinter.CTk):
 
         # Add layer panel frame
         self.layer_panel = customtkinter.CTkFrame(
-            self.tabview.tab("Canvas"), width=200, corner_radius=0
+            self.tabview.tab("Canvas"), corner_radius=0
         )
         self.layer_panel.grid(row=0, column=3, rowspan=3, sticky="nsew", padx=5, pady=5)
         self.layer_panel.grid_columnconfigure(0, weight=1)
+        self.layer_panel.grid_rowconfigure(1, weight=1)
 
         # Add layer panel label
         self.layer_panel_label = customtkinter.CTkLabel(
@@ -552,7 +544,7 @@ class Holo(customtkinter.CTk):
 
         # Add scrollable frame for layers
         self.layer_container = customtkinter.CTkScrollableFrame(
-            self.layer_panel, width=180, height=600
+            self.layer_panel,
         )
         self.layer_container.grid(row=1, column=0, pady=5, padx=5, sticky="nsew")
 
@@ -691,6 +683,16 @@ class Holo(customtkinter.CTk):
 
         # Initialize tool-specific counters
         self.tool_counters = {"brush": 0, "rect": 0, "fill": 0, "text": 0, "image": 0}
+
+        # Load icons
+        self.trash_icon = customtkinter.CTkImage(
+            light_image=Image.open("./images/trash-icon-black.png"),
+            dark_image=Image.open("./images/trash-icon-white.png"),
+        )
+        self.edit_icon = customtkinter.CTkImage(
+            light_image=Image.open("./images/edit-icon-black.png"),
+            dark_image=Image.open("./images/edit-icon-white.png"),
+        )
 
     ########################################################################################################################################################
     ########################################################################################################################################################
@@ -1022,7 +1024,7 @@ class Holo(customtkinter.CTk):
     def add_layer_to_panel(self, stroke_tag):
         layer_frame = customtkinter.CTkFrame(self.layer_container)
         layer_frame.grid(
-            row=len(self.layer_buttons), column=0, pady=2, padx=5, sticky="ew"
+            row=len(self.layer_buttons), column=0, pady=2, padx=5, sticky="nsw"
         )
         layer_frame.grid_columnconfigure(0, weight=1)
 
@@ -1055,21 +1057,23 @@ class Holo(customtkinter.CTk):
         ]:  # Removed 'image' from this list
             edit_button = customtkinter.CTkButton(
                 layer_frame,
-                text="Edit",
-                width=60,
+                text="",
+                width=24,
                 height=24,
+                image=self.edit_icon,
                 command=lambda t=stroke_tag: self.edit_layer_color(t),
             )
             edit_button.grid(row=0, column=next_column, pady=2, padx=2)
             buttons["edit_button"] = edit_button
             next_column += 1
 
-        # Delete button always appears
+        # Delete button with icon
         delete_button = customtkinter.CTkButton(
             layer_frame,
-            text="Delete",
-            width=60,
+            text="",  # Remove text
+            width=24,
             height=24,
+            image=self.trash_icon,  # Add icon
             command=lambda t=stroke_tag: self.delete_layer(t),
         )
         delete_button.grid(row=0, column=next_column, pady=2, padx=2)
@@ -1189,6 +1193,8 @@ class Holo(customtkinter.CTk):
                 data = base64.b64encode(file.read()).decode("utf-8")
                 image = f"data:application/octet-stream;base64,{data}"
 
+            replicate.Client(api_token=os.environ["REPLICATE_API_TOKEN"])
+
             output = replicate.run(
                 "qr2ai/outline:6f713aeb58eb5034ad353de02d7dd56c9efa79f2214e6b89a790dad8ca67ef49",
                 input={
@@ -1222,8 +1228,9 @@ class Holo(customtkinter.CTk):
                     file.write(item.read())
 
             ai_gen_image = cv2.imread("output_0.png")
+            ai_gen_image = cv2.cvtColor(ai_gen_image, cv2.COLOR_BGR2RGB)
             ai_gen_image = Image.fromarray(ai_gen_image)
-            ai_photo_image = ImageTk.PhotoImage(image=ai_gen_image)
+            ai_photo_image = ImageTk.PhotoImage(ai_gen_image)
             self.gen_ai_image_label.configure(text="")
             self.gen_ai_image_label.ai_photo_image = ai_photo_image
             self.gen_ai_image_label.configure(image=ai_photo_image)
@@ -1233,6 +1240,8 @@ class Holo(customtkinter.CTk):
         # pass
 
     def canvas_save_png(self):
+        self.canvas.delete("temp_bbox")
+        self.canvas.delete("temp_rect")
         self.file_path = filedialog.asksaveasfilename(
             defaultextension="*.png",
             filetypes=(
@@ -1433,7 +1442,7 @@ class Holo(customtkinter.CTk):
                 mouse_pressed = False
 
             captured_image = Image.fromarray(opencv_image)
-            photo_image = ImageTk.PhotoImage(image=captured_image)
+            photo_image = ImageTk.PhotoImage(captured_image)
 
             # Update the label with the new image
             self.webcam_image_label.configure(image=photo_image)
@@ -1538,6 +1547,7 @@ class Holo(customtkinter.CTk):
 
         # Create image on canvas
         stroke_tag = self.get_stroke_tag(self.active_tool)
+
         image_id = self.canvas.create_image(
             x_centered,
             y_centered,

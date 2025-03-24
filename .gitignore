@@ -10,3 +10,4 @@ holo.exe
 nuitka-crash-report.xml
 *.png
 *.jpg
+.env
