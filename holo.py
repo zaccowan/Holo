@@ -553,12 +553,32 @@ class Holo(customtkinter.CTk):
 
         # Generated AI Image Tab
         self.tabview.tab("Genrated AI Image").columnconfigure(0, weight=1)
-        self.tabview.tab("Genrated AI Image").rowconfigure(0, weight=1)
+        self.tabview.tab("Genrated AI Image").rowconfigure(
+            1, weight=1
+        )  # Changed from 0 to 1
+
+        # Add model selection frame
+        self.model_select_frame = customtkinter.CTkFrame(
+            self.tabview.tab("Genrated AI Image")
+        )
+        self.model_select_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+
+        # Add model selection dropdown
+        self.ai_model = tkinter.StringVar(value="Sketch to Image")
+        self.model_select = customtkinter.CTkOptionMenu(
+            self.model_select_frame,
+            values=["Sketch to Image", "Flux Schnell", "t2i-adapter-sdxl-sketch"],
+            variable=self.ai_model,
+            width=200,
+        )
+        self.model_select.grid(row=0, column=0, padx=5, pady=5)
+
+        # Move existing label to row 1
         self.gen_ai_image_label = customtkinter.CTkLabel(
             self.tabview.tab("Genrated AI Image"),
             text="Waiting for AI Generated Image (this may take time)",
         )
-        self.gen_ai_image_label.grid(row=0, column=0)
+        self.gen_ai_image_label.grid(row=1, column=0)
 
         # Webcam Tab
         self.tabview.tab("Webcam Image").columnconfigure((0, 1, 2, 3), weight=1)
@@ -650,9 +670,12 @@ class Holo(customtkinter.CTk):
 
         # Camera view
         self.webcam_image_label = customtkinter.CTkLabel(
-            self.tabview.tab("Webcam Image"), text="Webcam Image"
+            self.tabview.tab("Webcam Image"),
+            text="Webcam Image",
         )
-        self.webcam_image_label.grid(row=4, column=0, columnspan=4, sticky="nsew")
+        self.webcam_image_label.grid(
+            row=4, column=0, columnspan=4, sticky="nsew", padx=5, pady=5
+        )
 
         # Camera control buttons - reversed order
         self.open_camera_btn = customtkinter.CTkButton(
@@ -780,9 +803,6 @@ class Holo(customtkinter.CTk):
             )  # create window if its None or destroyed
         else:
             self.toplevel_window.focus()  # if window exists focus it
-
-        # if self.canvas_text is not None:
-        #     print(self.canvas_text)
 
     def set_canvas_text(self, entry_text):
         self.canvas_text = entry_text
@@ -1045,16 +1065,10 @@ class Holo(customtkinter.CTk):
 
         # Dictionary to store buttons for managing references
         buttons = {}
-
-        # Only add edit button for elements that can have their color changed
-        # Exclude images from getting edit button
         next_column = 1
-        if tool_type in [
-            "brush",
-            "rect",
-            "fill",
-            "text",
-        ]:  # Removed 'image' from this list
+
+        # Handle color edit button
+        if tool_type in ["brush", "rect", "fill", "text"]:
             edit_button = customtkinter.CTkButton(
                 layer_frame,
                 text="",
@@ -1067,13 +1081,26 @@ class Holo(customtkinter.CTk):
             buttons["edit_button"] = edit_button
             next_column += 1
 
+        # Add text edit button only for text elements
+        if tool_type == "text":
+            edit_text_button = customtkinter.CTkButton(
+                layer_frame,
+                text="Edit Text",
+                width=60,
+                height=24,
+                command=lambda t=stroke_tag: self.edit_layer_text(t),
+            )
+            edit_text_button.grid(row=0, column=next_column, pady=2, padx=2)
+            buttons["edit_text_button"] = edit_text_button
+            next_column += 1
+
         # Delete button with icon
         delete_button = customtkinter.CTkButton(
             layer_frame,
-            text="",  # Remove text
+            text="",
             width=24,
             height=24,
-            image=self.trash_icon,  # Add icon
+            image=self.trash_icon,
             command=lambda t=stroke_tag: self.delete_layer(t),
         )
         delete_button.grid(row=0, column=next_column, pady=2, padx=2)
@@ -1178,6 +1205,36 @@ class Holo(customtkinter.CTk):
             elif "fill" in stroke_tag:
                 self.canvas.itemconfig(stroke_tag, fill=color_code[1])
 
+    def edit_layer_text(self, stroke_tag):
+        """Change the font size of a text element"""
+        try:
+            # Get current text
+            current_text = self.canvas.itemcget(stroke_tag, "text")
+
+            # Create new font with current element_size
+            new_font = customtkinter.CTkFont(size=self.element_size)
+
+            # Update the text element's font
+            self.canvas.itemconfig(stroke_tag, font=new_font)
+
+            # Update bounding box if transform tool is active
+            if self.transform_active and stroke_tag in self.transform_tags:
+                self.canvas.delete("temp_bbox")
+                bbox = self.canvas.bbox(stroke_tag)
+                if bbox:
+                    self.canvas.create_rectangle(
+                        bbox[0] - 20,
+                        bbox[1] - 20,
+                        bbox[2] + 20,
+                        bbox[3] + 20,
+                        outline="#555555",
+                        width=5,
+                        tags="temp_bbox",
+                    )
+
+        except Exception as e:
+            print(f"Error updating text size: {e}")
+
     ################################
     # Canvas Saving and AI Generation
     ################################
@@ -1195,34 +1252,65 @@ class Holo(customtkinter.CTk):
 
             replicate.Client(api_token=os.environ["REPLICATE_API_TOKEN"])
 
-            output = replicate.run(
-                "qr2ai/outline:6f713aeb58eb5034ad353de02d7dd56c9efa79f2214e6b89a790dad8ca67ef49",
-                input={
-                    "seed": 0,
-                    "image": image,
-                    "width": 1280,
-                    "height": 720,
-                    "prompt": prompt,
-                    "sampler": "Euler a",
-                    "blur_size": 3,
-                    "use_canny": False,
-                    "lora_input": "",
-                    "lora_scale": "",
-                    "kernel_size": 3,
-                    "num_outputs": 1,
-                    "sketch_type": "HedPidNet",
-                    "suffix_prompt": "Imagine the harmonious blend of graceful forms and cosmic elegance, where each curve and line tells a story amidst the celestial backdrop, captured in a luxurious interplay of dark and light hues.",
-                    "guidance_scale": 7.5,
-                    "weight_primary": 0.7,
-                    "generate_square": False,
-                    "negative_prompt": "worst quality, low quality, low resolution, blurry, ugly, disfigured, uncrafted, filled ring, packed ring, cross, star, distorted, stagnant, watermark",
-                    "weight_secondary": 0.6,
-                    "erosion_iterations": 2,
-                    "dilation_iterations": 1,
-                    "num_inference_steps": 35,
-                    "adapter_conditioning_scale": 0.9,
-                },
-            )
+            if self.ai_model.get() == "Sketch to Image":
+                output = replicate.run(
+                    "qr2ai/outline:6f713aeb58eb5034ad353de02d7dd56c9efa79f2214e6b89a790dad8ca67ef49",
+                    input={
+                        "seed": 0,
+                        "image": image,
+                        "width": 1280,
+                        "height": 720,
+                        "prompt": prompt,
+                        "sampler": "Euler a",
+                        "blur_size": 3,
+                        "use_canny": False,
+                        "lora_input": "",
+                        "lora_scale": "",
+                        "kernel_size": 3,
+                        "num_outputs": 1,
+                        "sketch_type": "HedPidNet",
+                        "suffix_prompt": "Imagine the harmonious blend of graceful forms and cosmic elegance, where each curve and line tells a story amidst the celestial backdrop, captured in a luxurious interplay of dark and light hues.",
+                        "guidance_scale": 7.5,
+                        "weight_primary": 0.7,
+                        "generate_square": False,
+                        "negative_prompt": "worst quality, low quality, low resolution, blurry, ugly, disfigured, uncrafted, filled ring, packed ring, cross, star, distorted, stagnant, watermark",
+                        "weight_secondary": 0.6,
+                        "erosion_iterations": 2,
+                        "dilation_iterations": 1,
+                        "num_inference_steps": 35,
+                        "adapter_conditioning_scale": 0.9,
+                    },
+                )
+            elif self.ai_model.get() == "t2i-adapter-sdxl-sketch":
+                output = replicate.run(
+                    "black-forest-labs/flux-schnell",
+                    input={
+                        "prompt": prompt,
+                        "megapixels": "1",
+                        "num_outputs": 1,
+                        "aspect_ratio": "16:9",
+                        "output_format": "png",
+                        "output_quality": 80,
+                        "num_inference_steps": 4,
+                    },
+                )
+            else:  # T2I Adapter SDXL Sketch
+                output = replicate.run(
+                    "adirik/t2i-adapter-sdxl-sketch:3a14a915b013decb6ab672115c8bced7c088df86c2ddd0a89433717b9ec7d927",
+                    input={
+                        "image": image,
+                        "prompt": prompt,
+                        "scheduler": "K_EULER_ANCESTRAL",
+                        "num_samples": 1,
+                        "guidance_scale": 7.5,
+                        "negative_prompt": "extra digit, fewer digits, cropped, worst quality, low quality, glitch, deformed, mutated, ugly, disfigured",
+                        "num_inference_steps": 30,
+                        "adapter_conditioning_scale": 0.9,
+                        "adapter_conditioning_factor": 1,
+                    },
+                )
+
+            # Rest of the function remains the same
             for index, item in enumerate(output):
                 with open(f"output_{index}.png", "wb") as file:
                     file.write(item.read())
@@ -1441,8 +1529,23 @@ class Holo(customtkinter.CTk):
                 pyautogui.mouseUp()
                 mouse_pressed = False
 
+            # Get current label size for dynamic image scaling
+            label_width = self.webcam_image_label.winfo_width()
+            label_height = self.webcam_image_label.winfo_height()
+
+            # Ensure minimum dimensions
+            display_width = max(int(self.frame_width * 0.6), 800)
+            display_height = max(
+                int(self.frame_height * 0.6), 450
+            )  # Maintains 16:9 aspect ratio
+
+            # Create scaled CTkImage
             captured_image = Image.fromarray(opencv_image)
-            photo_image = ImageTk.PhotoImage(captured_image)
+            photo_image = customtkinter.CTkImage(
+                light_image=captured_image,
+                dark_image=captured_image,
+                size=(display_width, display_height),
+            )
 
             # Update the label with the new image
             self.webcam_image_label.configure(image=photo_image)
@@ -1455,21 +1558,35 @@ class Holo(customtkinter.CTk):
         self.close_camera()
 
     def close_camera(self):
+        """Safely close the camera and cleanup resources"""
+        # Stop camera first
         self.camera_running = False
         self.stop_event.set()
+
+        # Release camera resources
         if self.cap is not None:
             self.cap.release()
             self.cap = None
         cv2.destroyAllWindows()
 
-        # Recreate the webcam label
-        self.webcam_image_label.destroy()
-        self.webcam_image_label = customtkinter.CTkLabel(
-            self.tabview.tab("Webcam Image"), text="Webcam Image"
-        )
-        self.webcam_image_label.grid(row=4, column=0, columnspan=3, sticky="nsew")
-        self.open_camera_btn.configure(state="normal")
-        self.close_camera_btn.configure(state="disabled")
+        # Ensure we're in the main thread for UI updates
+        def update_ui():
+            if hasattr(self, "webcam_image_label"):
+                try:
+                    self.webcam_image_label.destroy()
+                    self.webcam_image_label = customtkinter.CTkLabel(
+                        self.tabview.tab("Webcam Image"), text="Webcam Image"
+                    )
+                    self.webcam_image_label.grid(
+                        row=4, column=0, columnspan=3, sticky="nsew"
+                    )
+                    self.open_camera_btn.configure(state="normal")
+                    self.close_camera_btn.configure(state="disabled")
+                except Exception as e:
+                    print(f"Error updating UI: {e}")
+
+        # Schedule UI update for next mainloop iteration
+        self.after(100, update_ui)
 
     def on_closing(self):
         if hasattr(self, "camera_running") and self.camera_running:
