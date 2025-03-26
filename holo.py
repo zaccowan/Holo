@@ -215,6 +215,7 @@ class Holo(customtkinter.CTk):
 
     screen_width, screen_height = pyautogui.size()
     pyautogui.FAILSAFE = False
+    pyautogui.PAUSE = 0
 
     current_click = True
 
@@ -611,61 +612,75 @@ class Holo(customtkinter.CTk):
         )
         self.flip_camera.grid(row=2, column=0, padx=5, pady=5)
 
+        # Add after the flip camera toggle in __init__
+        self.mouse_control = customtkinter.CTkCheckBox(
+            self.camera_controls_frame,
+            text="Mouse Control",
+            command=self.toggle_mouse_control,
+        )
+        self.mouse_control.grid(row=3, column=0, padx=5, pady=5)
+
         # Bounds control frame - right side
         self.bounds_frame = customtkinter.CTkFrame(self.tabview.tab("Webcam Image"))
         self.bounds_frame.grid(row=0, column=2, columnspan=2, padx=5, pady=5)
 
         # X, Y position controls
         self.bound_pos_label = customtkinter.CTkLabel(
-            self.bounds_frame, text="Bounding Box Position (X, Y):"
+            self.bounds_frame, text="Bounding Box Edges:"
         )
         self.bound_pos_label.grid(row=0, column=0, columnspan=2, padx=5, pady=2)
 
-        self.x_center_scroller = customtkinter.CTkSlider(
+        # Left bound
+        self.left_bound_scroller = customtkinter.CTkSlider(
             self.bounds_frame,
             width=200,
-            command=self.set_element_size,
-            progress_color="#4477AA",
             from_=0,
             to=int(self.frame_width),
         )
-        self.x_center_scroller.grid(row=1, column=0, padx=5, pady=2)
+        self.left_bound_scroller.grid(row=1, column=0, padx=5, pady=2)
+        self.left_bound_label = customtkinter.CTkLabel(self.bounds_frame, text="Left")
+        self.left_bound_label.grid(row=2, column=0)
 
-        self.y_center_scroller = customtkinter.CTkSlider(
+        # Right bound
+        self.right_bound_scroller = customtkinter.CTkSlider(
             self.bounds_frame,
             width=200,
-            command=self.set_element_size,
-            progress_color="#4477AA",
+            from_=0,
+            to=int(self.frame_width),
+        )
+        self.right_bound_scroller.grid(row=1, column=1, padx=5, pady=2)
+        self.right_bound_label = customtkinter.CTkLabel(self.bounds_frame, text="Right")
+        self.right_bound_label.grid(row=2, column=1)
+
+        # Top bound
+        self.top_bound_scroller = customtkinter.CTkSlider(
+            self.bounds_frame,
+            width=200,
             from_=0,
             to=int(self.frame_height),
         )
-        self.y_center_scroller.grid(row=1, column=1, padx=5, pady=2)
+        self.top_bound_scroller.grid(row=3, column=0, padx=5, pady=2)
+        self.top_bound_label = customtkinter.CTkLabel(self.bounds_frame, text="Top")
+        self.top_bound_label.grid(row=4, column=0)
 
-        # Size controls
-        self.bound_size_label = customtkinter.CTkLabel(
-            self.bounds_frame, text="Bounding Box Size (Width, Height):"
-        )
-        self.bound_size_label.grid(row=2, column=0, columnspan=2, padx=5, pady=2)
-
-        self.bound_width_scroller = customtkinter.CTkSlider(
+        # Bottom bound
+        self.bottom_bound_scroller = customtkinter.CTkSlider(
             self.bounds_frame,
             width=200,
-            command=self.set_element_size,
-            progress_color="#4477AA",
             from_=0,
-            to=int(self.frame_width * 2),
+            to=int(self.frame_height),
         )
-        self.bound_width_scroller.grid(row=3, column=0, padx=5, pady=2)
+        self.bottom_bound_scroller.grid(row=3, column=1, padx=5, pady=2)
+        self.bottom_bound_label = customtkinter.CTkLabel(
+            self.bounds_frame, text="Bottom"
+        )
+        self.bottom_bound_label.grid(row=4, column=1)
 
-        self.bound_height_scroller = customtkinter.CTkSlider(
-            self.bounds_frame,
-            width=200,
-            command=self.set_element_size,
-            progress_color="#4477AA",
-            from_=0,
-            to=int(self.frame_height * 2),
-        )
-        self.bound_height_scroller.grid(row=3, column=1, padx=5, pady=2)
+        # Set default values for bounds
+        self.left_bound_scroller.set(0)  # Left at 0
+        self.right_bound_scroller.set(self.frame_width)  # Right at max width
+        self.top_bound_scroller.set(0)  # Top at 0
+        self.bottom_bound_scroller.set(self.frame_height)  # Bottom at max height
 
         # Camera view
         self.webcam_image_label = customtkinter.CTkLabel(
@@ -701,29 +716,34 @@ class Holo(customtkinter.CTk):
         )
         self.left_bound_btn = customtkinter.CTkButton(
             self.auto_configure_bound_frame,
+            command=self.auto_configure_left_bound,
             text="Left Bound",
             width=100,
         )
-        self.open_camera_btn.grid(row=1, column=0, padx=5, pady=5)
+        self.left_bound_btn.grid(row=1, column=0, padx=5, pady=5)
         self.right_bound_btn = customtkinter.CTkButton(
             self.auto_configure_bound_frame,
+            command=self.auto_configure_right_bound,
             text="Right Bound",
             width=100,
         )
-        self.open_camera_btn.grid(row=1, column=2, padx=5, pady=5)
+        self.right_bound_btn.grid(row=1, column=2, padx=5, pady=5)
 
-        self.left_bound_btn = customtkinter.CTkButton(
+        self.top_bound_btn = customtkinter.CTkButton(
             self.auto_configure_bound_frame,
+            command=self.auto_configure_top_bound,
             text="Top Bound",
             width=100,
         )
-        self.open_camera_btn.grid(row=0, column=1, padx=5, pady=5)
-        self.right_bound_btn = customtkinter.CTkButton(
+        self.top_bound_btn.grid(row=0, column=1, padx=5, pady=5)
+
+        self.bottom_bound_btn = customtkinter.CTkButton(
             self.auto_configure_bound_frame,
+            command=self.auto_configure_bottom_bound,
             text="Bottom Bound",
             width=100,
         )
-        self.open_camera_btn.grid(row=2, column=1, padx=5, pady=5)
+        self.bottom_bound_btn.grid(row=2, column=1, padx=5, pady=5)
 
         # Add webcam settings frame
         self.webcam_settings_frame = customtkinter.CTkFrame(
@@ -1505,7 +1525,7 @@ class Holo(customtkinter.CTk):
             # Process every other frame
             if process_this_frame:
                 # Resize frame for faster processing
-                small_frame = cv2.resize(frame, (0, 0), fx=1, fy=1)
+                small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
 
                 if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
                     small_frame = cv2.flip(small_frame, 1)
@@ -1524,25 +1544,19 @@ class Holo(customtkinter.CTk):
                     frame = cv2.flip(frame, 1)
                 opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            process_this_frame = not process_this_frame  # Toggle for next frame
-
             current_click = False
 
-            bounding_center_x = self.x_center_scroller.get()
-            bounding_center_y = self.y_center_scroller.get()
-            bounding_width = self.bound_width_scroller.get()
-            bounding_height = self.bound_height_scroller.get()
+            # Get bounds
+            left_bound = self.left_bound_scroller.get()
+            right_bound = self.right_bound_scroller.get()
+            top_bound = self.top_bound_scroller.get()
+            bottom_bound = self.bottom_bound_scroller.get()
 
+            # Draw bounding box
             opencv_image = cv2.rectangle(
                 opencv_image,
-                (
-                    int(bounding_center_x - (bounding_width / 2)),
-                    int(bounding_center_y - (bounding_height / 2)),
-                ),
-                (
-                    int(bounding_center_x + (bounding_width / 2)),
-                    int(bounding_center_y + (bounding_height / 2)),
-                ),
+                (int(left_bound), int(top_bound)),
+                (int(right_bound), int(bottom_bound)),
                 (255, 255, 255),
                 5,
             )
@@ -1577,18 +1591,12 @@ class Holo(customtkinter.CTk):
 
                 mouse_x = np.interp(
                     palm_landmark.x * self.frame_width,
-                    [
-                        int(bounding_center_x - (bounding_width / 2)),
-                        int(bounding_center_x + (bounding_width / 2)),
-                    ],
+                    [left_bound, right_bound],
                     [0, self.screen_width - 1],
                 )
                 mouse_y = np.interp(
                     palm_landmark.y * self.frame_height,
-                    [
-                        int(bounding_center_y - (bounding_height / 2)),
-                        int(bounding_center_y + (bounding_height / 2)),
-                    ],
+                    [top_bound, bottom_bound],
                     [0, self.screen_height - 1],
                 )
 
@@ -1604,7 +1612,11 @@ class Holo(customtkinter.CTk):
                     self.mouse_y_positions
                 )
 
-                pyautogui.moveTo(int(smoothed_mouse_x), int(smoothed_mouse_y))
+                if (
+                    hasattr(self, "mouse_control_enabled")
+                    and self.mouse_control_enabled
+                ):
+                    pyautogui.moveTo(int(smoothed_mouse_x), int(smoothed_mouse_y))
 
                 self.mp_drawing.draw_landmarks(
                     opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
@@ -1645,8 +1657,8 @@ class Holo(customtkinter.CTk):
             self.webcam_image_label.photo_image = photo_image
 
             # Limit the frame rate to 30 FPS
-            # elapsed_time = time.time() - start_time
-            # time.sleep(max(0, 1 / 30 - elapsed_time))
+            elapsed_time = time.time() - start_time
+            time.sleep(max(0, 1 / 30 - elapsed_time))
 
         self.close_camera()
 
@@ -1892,6 +1904,78 @@ class Holo(customtkinter.CTk):
             min_detection_confidence=self.detection_slider.get(),
             min_tracking_confidence=float(value),
         )
+
+    def auto_configure_left_bound(self):
+        """Set left bound to current palm position"""
+        if self.camera_running and hasattr(self, "hands"):
+            ret, frame = self.cap.read()
+            if ret:
+                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
+                    frame = cv2.flip(frame, 1)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = self.hands.process(frame_rgb)
+
+                if results.multi_hand_landmarks:
+                    palm = results.multi_hand_landmarks[0].landmark[
+                        self.mp_hands.HandLandmark.WRIST
+                    ]
+                    x_pos = palm.x * self.frame_width
+                    self.left_bound_scroller.set(x_pos)
+
+    def auto_configure_right_bound(self):
+        """Set right bound to current palm position"""
+        if self.camera_running and hasattr(self, "hands"):
+            ret, frame = self.cap.read()
+            if ret:
+                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
+                    frame = cv2.flip(frame, 1)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = self.hands.process(frame_rgb)
+
+                if results.multi_hand_landmarks:
+                    palm = results.multi_hand_landmarks[0].landmark[
+                        self.mp_hands.HandLandmark.WRIST
+                    ]
+                    x_pos = palm.x * self.frame_width
+                    self.right_bound_scroller.set(x_pos)
+
+    def auto_configure_top_bound(self):
+        """Set top bound to current palm position"""
+        if self.camera_running and hasattr(self, "hands"):
+            ret, frame = self.cap.read()
+            if ret:
+                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
+                    frame = cv2.flip(frame, 1)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = self.hands.process(frame_rgb)
+
+                if results.multi_hand_landmarks:
+                    palm = results.multi_hand_landmarks[0].landmark[
+                        self.mp_hands.HandLandmark.WRIST
+                    ]
+                    y_pos = palm.y * self.frame_height
+                    self.top_bound_scroller.set(y_pos)
+
+    def auto_configure_bottom_bound(self):
+        """Set bottom bound to current palm position"""
+        if self.camera_running and hasattr(self, "hands"):
+            ret, frame = self.cap.read()
+            if ret:
+                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
+                    frame = cv2.flip(frame, 1)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = self.hands.process(frame_rgb)
+
+                if results.multi_hand_landmarks:
+                    palm = results.multi_hand_landmarks[0].landmark[
+                        self.mp_hands.HandLandmark.WRIST
+                    ]
+                    y_pos = palm.y * self.frame_height
+                    self.bottom_bound_scroller.set(y_pos)
+
+    def toggle_mouse_control(self):
+        """Toggle mouse control on/off"""
+        self.mouse_control_enabled = self.mouse_control.get()
 
 
 if __name__ == "__main__":
