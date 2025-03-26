@@ -239,13 +239,15 @@ class Holo(customtkinter.CTk):
         )
 
         # Smoothing parameters
-        self.smoothing_window_size = 5
-        self.mouse_x_positions = collections.deque(maxlen=self.smoothing_window_size)
-        self.mouse_y_positions = collections.deque(maxlen=self.smoothing_window_size)
+        self.mouse_smoothing = 5
+        self.mouse_x_positions = collections.deque(maxlen=self.mouse_smoothing)
+        self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
 
         # configure window
         self.title("Holo")
-        self.geometry(f"{1280}x{720}")
+
+        # Optional: Add F11 key binding to toggle fullscreen
+        self.bind("<F11>", self.toggle_fullscreen)
         self.bind("<Escape>", lambda e: self.on_closing())
 
         # Override the protocol method to detect window close
@@ -761,7 +763,7 @@ class Holo(customtkinter.CTk):
 
         # Smoothing window size
         self.smoothing_label = customtkinter.CTkLabel(
-            self.webcam_settings_frame, text="Smoothing Window:"
+            self.webcam_settings_frame, text="Mouse Smoothing:"
         )
         self.smoothing_label.grid(row=1, column=0, padx=5, pady=2)
 
@@ -772,7 +774,7 @@ class Holo(customtkinter.CTk):
             number_of_steps=19,
             command=self.update_smoothing,
         )
-        self.smoothing_slider.set(self.smoothing_window_size)
+        self.smoothing_slider.set(self.mouse_smoothing)
         self.smoothing_slider.grid(row=1, column=1, padx=5, pady=2)
 
         # Detection confidence
@@ -1586,7 +1588,7 @@ class Holo(customtkinter.CTk):
                     2,
                 )
 
-                if distance < 0.03:  # Threshold for "OK" gesture
+                if distance < 0.05:  # Threshold for "OK" gesture
                     current_click = True
 
                 mouse_x = np.interp(
@@ -1879,9 +1881,9 @@ class Holo(customtkinter.CTk):
 
     def update_smoothing(self, value):
         """Update smoothing window size"""
-        self.smoothing_window_size = int(value)
-        self.mouse_x_positions = collections.deque(maxlen=self.smoothing_window_size)
-        self.mouse_y_positions = collections.deque(maxlen=self.smoothing_window_size)
+        self.mouse_smoothing = int(value)
+        self.mouse_x_positions = collections.deque(maxlen=self.mouse_smoothing)
+        self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
 
     def update_detection_confidence(self, value):
         """Update hand detection confidence threshold"""
@@ -1976,6 +1978,13 @@ class Holo(customtkinter.CTk):
     def toggle_mouse_control(self):
         """Toggle mouse control on/off"""
         self.mouse_control_enabled = self.mouse_control.get()
+
+    def toggle_fullscreen(self, event=None):
+        """Toggle fullscreen mode"""
+        if self.state() == "zoomed":
+            self.state("normal")
+        else:
+            self.state("zoomed")
 
 
 if __name__ == "__main__":
