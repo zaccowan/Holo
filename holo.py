@@ -235,7 +235,6 @@ class Holo(customtkinter.CTk):
             max_num_hands=1,  # Already set correctly
             min_detection_confidence=0.5,  # Lower this from 0.7
             min_tracking_confidence=0.5,  # Lower this from 0.7
-            model_complexity=0,  # Add this - use simpler model
         )
 
         # Smoothing parameters
@@ -677,7 +676,6 @@ class Holo(customtkinter.CTk):
             row=4, column=0, columnspan=4, sticky="nsew", padx=5, pady=5
         )
 
-        # Camera control buttons - reversed order
         self.open_camera_btn = customtkinter.CTkButton(
             self.tabview.tab("Webcam Image"),
             text="Open Camera",
@@ -692,7 +690,102 @@ class Holo(customtkinter.CTk):
             command=self.close_camera,
             width=100,
         )
-        self.close_camera_btn.grid(row=5, column=3, padx=5, pady=5)
+        self.close_camera_btn.grid(row=5, column=1, padx=5, pady=5)
+
+        # Auto Configure Hand Bounds
+        self.auto_configure_bound_frame = customtkinter.CTkFrame(
+            self.tabview.tab("Webcam Image")
+        )
+        self.auto_configure_bound_frame.grid(
+            row=5, column=2, columnspan=2, padx=5, pady=5
+        )
+        self.left_bound_btn = customtkinter.CTkButton(
+            self.auto_configure_bound_frame,
+            text="Left Bound",
+            width=100,
+        )
+        self.open_camera_btn.grid(row=1, column=0, padx=5, pady=5)
+        self.right_bound_btn = customtkinter.CTkButton(
+            self.auto_configure_bound_frame,
+            text="Right Bound",
+            width=100,
+        )
+        self.open_camera_btn.grid(row=1, column=2, padx=5, pady=5)
+
+        self.left_bound_btn = customtkinter.CTkButton(
+            self.auto_configure_bound_frame,
+            text="Top Bound",
+            width=100,
+        )
+        self.open_camera_btn.grid(row=0, column=1, padx=5, pady=5)
+        self.right_bound_btn = customtkinter.CTkButton(
+            self.auto_configure_bound_frame,
+            text="Bottom Bound",
+            width=100,
+        )
+        self.open_camera_btn.grid(row=2, column=1, padx=5, pady=5)
+
+        # Add webcam settings frame
+        self.webcam_settings_frame = customtkinter.CTkFrame(
+            self.tabview.tab("Webcam Image")
+        )
+        self.webcam_settings_frame.grid(row=0, column=1, padx=5, pady=5)
+
+        # Settings label
+        self.settings_label = customtkinter.CTkLabel(
+            self.webcam_settings_frame,
+            text="Tracking Settings",
+            font=customtkinter.CTkFont(size=14, weight="bold"),
+        )
+        self.settings_label.grid(row=0, column=0, columnspan=2, padx=5, pady=5)
+
+        # Smoothing window size
+        self.smoothing_label = customtkinter.CTkLabel(
+            self.webcam_settings_frame, text="Smoothing Window:"
+        )
+        self.smoothing_label.grid(row=1, column=0, padx=5, pady=2)
+
+        self.smoothing_slider = customtkinter.CTkSlider(
+            self.webcam_settings_frame,
+            from_=1,
+            to=20,
+            number_of_steps=19,
+            command=self.update_smoothing,
+        )
+        self.smoothing_slider.set(self.smoothing_window_size)
+        self.smoothing_slider.grid(row=1, column=1, padx=5, pady=2)
+
+        # Detection confidence
+        self.detection_label = customtkinter.CTkLabel(
+            self.webcam_settings_frame, text="Detection Confidence:"
+        )
+        self.detection_label.grid(row=2, column=0, padx=5, pady=2)
+
+        self.detection_slider = customtkinter.CTkSlider(
+            self.webcam_settings_frame,
+            from_=0.1,
+            to=1.0,
+            number_of_steps=18,
+            command=self.update_detection_confidence,
+        )
+        self.detection_slider.set(0.5)  # Default value
+        self.detection_slider.grid(row=2, column=1, padx=5, pady=2)
+
+        # Tracking confidence
+        self.tracking_label = customtkinter.CTkLabel(
+            self.webcam_settings_frame, text="Tracking Confidence:"
+        )
+        self.tracking_label.grid(row=3, column=0, padx=5, pady=2)
+
+        self.tracking_slider = customtkinter.CTkSlider(
+            self.webcam_settings_frame,
+            from_=0.1,
+            to=1.0,
+            number_of_steps=18,
+            command=self.update_tracking_confidence,
+        )
+        self.tracking_slider.set(0.5)  # Default value
+        self.tracking_slider.grid(row=3, column=1, padx=5, pady=2)
 
         # ################################
         # ################################
@@ -1412,7 +1505,7 @@ class Holo(customtkinter.CTk):
             # Process every other frame
             if process_this_frame:
                 # Resize frame for faster processing
-                small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+                small_frame = cv2.resize(frame, (0, 0), fx=1, fy=1)
 
                 if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
                     small_frame = cv2.flip(small_frame, 1)
@@ -1479,7 +1572,7 @@ class Holo(customtkinter.CTk):
                     2,
                 )
 
-                if distance < 0.1:  # Threshold for "OK" gesture
+                if distance < 0.03:  # Threshold for "OK" gesture
                     current_click = True
 
                 mouse_x = np.interp(
@@ -1552,8 +1645,8 @@ class Holo(customtkinter.CTk):
             self.webcam_image_label.photo_image = photo_image
 
             # Limit the frame rate to 30 FPS
-            elapsed_time = time.time() - start_time
-            time.sleep(max(0, 1 / 30 - elapsed_time))
+            # elapsed_time = time.time() - start_time
+            # time.sleep(max(0, 1 / 30 - elapsed_time))
 
         self.close_camera()
 
@@ -1771,6 +1864,34 @@ class Holo(customtkinter.CTk):
 
             # Configure canvas size
             self.canvas.configure(width=new_width, height=new_height)
+
+    def update_smoothing(self, value):
+        """Update smoothing window size"""
+        self.smoothing_window_size = int(value)
+        self.mouse_x_positions = collections.deque(maxlen=self.smoothing_window_size)
+        self.mouse_y_positions = collections.deque(maxlen=self.smoothing_window_size)
+
+    def update_detection_confidence(self, value):
+        """Update hand detection confidence threshold"""
+        if hasattr(self, "hands"):
+            self.hands.close()
+        self.hands = self.mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=float(value),
+            min_tracking_confidence=self.tracking_slider.get(),
+        )
+
+    def update_tracking_confidence(self, value):
+        """Update hand tracking confidence threshold"""
+        if hasattr(self, "hands"):
+            self.hands.close()
+        self.hands = self.mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=self.detection_slider.get(),
+            min_tracking_confidence=float(value),
+        )
 
 
 if __name__ == "__main__":
