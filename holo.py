@@ -12,6 +12,7 @@ from PIL import ImageGrab, Image, ImageTk, ImageOps
 import ctypes
 import time
 import collections
+import pywinstyles
 
 # Imports for hand tracking and mouse manipulation
 import math
@@ -245,6 +246,9 @@ class Holo(customtkinter.CTk):
 
         # configure window
         self.title("Holo")
+        self.geometry(f"{self.frame_width}x{self.frame_height}")
+        # set a minmum size for the window
+        self.minsize(1280, 720)
 
         # Optional: Add F11 key binding to toggle fullscreen
         self.bind("<F11>", self.toggle_fullscreen)
@@ -461,7 +465,6 @@ class Holo(customtkinter.CTk):
             self.canvas_frame,
             bg="white",
             cursor="circle",
-            highlightthickness=0,
         )
         self.canvas.place(relx=0.5, rely=0.5, anchor="center", width=1280, height=720)
 
@@ -687,11 +690,10 @@ class Holo(customtkinter.CTk):
         # Camera view
         self.webcam_image_label = customtkinter.CTkLabel(
             self.tabview.tab("Webcam Image"),
-            text="Webcam Image",
+            text="Waiting for Camera Feed",
+            fg_color="transparent",
         )
-        self.webcam_image_label.grid(
-            row=4, column=0, columnspan=4, sticky="nsew", padx=5, pady=5
-        )
+        self.webcam_image_label.grid(row=4, column=0, columnspan=4)
 
         self.open_camera_btn = customtkinter.CTkButton(
             self.tabview.tab("Webcam Image"),
@@ -832,14 +834,28 @@ class Holo(customtkinter.CTk):
             dark_image=Image.open("./images/edit-icon-white.png"),
         )
 
+        self.apply_win_style("acrylic")
+
     ########################################################################################################################################################
     ########################################################################################################################################################
     # End of init ##########################################################################################################################################
     ########################################################################################################################################################
     ########################################################################################################################################################
 
+    def apply_win_style(self, style_name):
+        pywinstyles.apply_style(self, style_name)
+
+        pywinstyles.set_opacity(self.canvas, 1)
+        pywinstyles.set_opacity(self.webcam_image_label, 1)
+        pywinstyles.set_opacity(self.gen_ai_image_label, 1)
+
     def change_appearance_mode_event(self, new_appearance_mode: str):
         customtkinter.set_appearance_mode(new_appearance_mode)
+        if new_appearance_mode == "Light":
+            self.apply_win_style("mica")
+        elif new_appearance_mode == "Dark":
+            self.apply_win_style("acrylic")
+            pywinstyles.set_opacity(self, 1)
 
     def change_scaling_event(self, new_scaling: str):
         new_scaling_float = int(new_scaling.replace("%", "")) / 100
@@ -1684,9 +1700,7 @@ class Holo(customtkinter.CTk):
                     self.webcam_image_label = customtkinter.CTkLabel(
                         self.tabview.tab("Webcam Image"), text="Webcam Image"
                     )
-                    self.webcam_image_label.grid(
-                        row=4, column=0, columnspan=3, sticky="nsew"
-                    )
+                    self.webcam_image_label.grid(row=4, column=0, columnspan=4)
                     self.open_camera_btn.configure(state="normal")
                     self.close_camera_btn.configure(state="disabled")
                 except Exception as e:
