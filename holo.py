@@ -190,7 +190,8 @@ class Holo(customtkinter.CTk):
         3: "Text Tool",
         4: "Transform Tool",
         5: "Delete Tool",
-        6: "Image Tool",  # Add this line
+        6: "Image Tool",
+        7: "Calligraphy",  # Add new tool
     }
     active_tool = "Circle Brush"
     mouse_active_coords = {
@@ -230,7 +231,7 @@ class Holo(customtkinter.CTk):
     velocity_threshold_x = 7.0  # X-axis threshold
     velocity_threshold_y = 7.0  # Y-axis threshold
     base_slow_factor = 0.1  # Base slowdown factor
-    min_bound_size = 100  # Minimum bound size before additional slowdown
+    min_bound_size = 600  # Minimum bound size before additional slowdown
 
     def __init__(self):
         super().__init__()
@@ -401,6 +402,13 @@ class Holo(customtkinter.CTk):
             text="Image Tool",
         )
         self.radio_button_7.grid(row=7, column=0, pady=10, padx=20, sticky="nsew")
+        self.radio_button_8 = customtkinter.CTkRadioButton(
+            master=self.radiobutton_frame,
+            variable=self.radio_tool_var,
+            value=7,
+            text="Calligraphy",
+        )
+        self.radio_button_8.grid(row=8, column=0, pady=10, padx=20, sticky="nsew")
 
         self.appearance_mode_label = customtkinter.CTkLabel(
             self.sidebar_frame, text="Appearance Mode:", anchor="w"
@@ -730,6 +738,14 @@ class Holo(customtkinter.CTk):
         self.auto_configure_bound_frame.grid(
             row=5, column=2, columnspan=2, padx=5, pady=5
         )
+
+        self.depth_btn = customtkinter.CTkButton(
+            self.auto_configure_bound_frame,
+            command=self.configure_depth,
+            text="Calibrate Depth",
+            width=100,
+        )
+        self.depth_btn.grid(row=1, column=1, padx=5, pady=5)
         self.left_bound_btn = customtkinter.CTkButton(
             self.auto_configure_bound_frame,
             command=self.auto_configure_left_bound,
@@ -1071,12 +1087,67 @@ class Holo(customtkinter.CTk):
                             self.mouse_down_canvas_coords = (event.x, event.y)
                         else:
                             self.update_temp_bbox(event)
+                    case "Calligraphy":
+                        if self.mouse_down:
+                            # Get current hand depth if available
+                            depth_ratio = 1.0
+                            if (
+                                hasattr(self, "depth_tracking")
+                                and self.depth_tracking
+                                and hasattr(self, "depth_reference")
+                            ):
+                                depth_ratio = self.get_current_depth_ratio()
+
+                            # Adjust stroke width based on depth
+                            stroke_width = self.element_size * depth_ratio
+
+                            # Get stroke tag only once when starting a new stroke
+                            if not hasattr(self, "current_calli_tag"):
+                                self.current_calli_tag = self.get_stroke_tag(
+                                    self.active_tool
+                                )
+                                self.add_layer_to_panel(self.current_calli_tag)
+
+                            # Create calligraphy stroke
+                            self.canvas.create_line(
+                                self.mouse_active_coords["previous"][0],
+                                self.mouse_active_coords["previous"][1],
+                                self.mouse_active_coords["current"][0],
+                                self.mouse_active_coords["current"][1],
+                                fill=self.hex_color,
+                                width=stroke_width,
+                                capstyle=tkinter.ROUND,
+                                smooth=True,
+                                splinesteps=72,  # Double the spline steps for smoother curves
+                                tags=self.current_calli_tag,
+                            )
         else:
             match self.active_tool:
                 case "Delete Tool":
                     self.update_temp_bbox(event)
                 case "Transform Tool":
                     self.update_temp_bbox(event)
+                    item = self.canvas.find_closest(event.x, event.y)[0]
+                    tag = self.canvas.gettags(item)
+                    if not self.transform_active:
+                        self.transform_active = True
+                        self.transform_tags = [tag[0]]
+                        # Show bounding box for selected stroke
+                        self.canvas.delete("temp_bbox")
+                        bbox = self.canvas.bbox(tag[0])
+                        if bbox:
+                            self.canvas.create_rectangle(
+                                bbox[0] - 20,
+                                bbox[1] - 20,
+                                bbox[2] + 20,
+                                bbox[3] + 20,
+                                outline="#555555",
+                                width=5,
+                                tags="temp_bbox",
+                            )
+                    elif tag[0] not in self.transform_tags:
+                        self.transform_active = False
+                        self.transform_tags.clear()
 
     def update_temp_bbox(self, event):
         self.canvas.delete("temp_bbox")
@@ -1137,6 +1208,10 @@ class Holo(customtkinter.CTk):
         # Clear brush tag when stroke is complete
         if hasattr(self, "current_brush_tag"):
             delattr(self, "current_brush_tag")
+
+        # Clear stroke tags when stroke is complete
+        if hasattr(self, "current_calli_tag"):
+            delattr(self, "current_calli_tag")
 
         match self.active_tool:
             case "Circle Brush":
@@ -1604,13 +1679,13 @@ class Holo(customtkinter.CTk):
                 palm_landmark = hand_landmarks.landmark[
                     self.mp_hands.HandLandmark.WRIST
                 ]
-                distance = math.hypot(
+                finger_distance = math.hypot(
                     index_tip_landmark.x - thumb_tip_landmark.x,
                     index_tip_landmark.y - thumb_tip_landmark.y,
                 )
                 cv2.putText(
                     opencv_image,
-                    "Distance: " + str(distance)[:6],
+                    "finger_distance: " + str(finger_distance)[:6],
                     (30, 50),
                     1,
                     2,
@@ -1618,7 +1693,7 @@ class Holo(customtkinter.CTk):
                     2,
                 )
 
-                if distance < 0.05:  # Threshold for "OK" gesture
+                if finger_distance < 0.05:  # Threshold for "OK" gesture
                     current_click = True
 
                 # Calculate raw mouse position
@@ -1659,7 +1734,9 @@ class Holo(customtkinter.CTk):
                 )
 
                 # Calculate adjusted slow factors with extra slowdown when over canvas
-                canvas_slowdown = 3.0 if is_over_canvas and distance < 0.05 else 1.0
+                canvas_slowdown = (
+                    3.0 if is_over_canvas and finger_distance < 0.05 else 1.0
+                )
                 x_slow_factor = self.base_slow_factor * width_scale / canvas_slowdown
                 y_slow_factor = (
                     self.base_slow_factor * height_scale / 2 / canvas_slowdown
@@ -1696,6 +1773,49 @@ class Holo(customtkinter.CTk):
                 self.mp_drawing.draw_landmarks(
                     opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
                 )
+
+                # Add depth tracking logic
+                if hasattr(self, "depth_tracking") and self.depth_tracking:
+                    # Calculate current hand size
+                    wrist = hand_landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
+                    middle_mcp = hand_landmarks.landmark[
+                        self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP
+                    ]
+                    current_hand_size = math.sqrt(
+                        (wrist.x - middle_mcp.x) ** 2 + (wrist.y - middle_mcp.y) ** 2
+                    )
+
+                    # Calculate depth ratio
+                    depth_ratio = (
+                        current_hand_size / self.depth_reference["initial_size"]
+                    )
+
+                    # Adjust bounds based on depth
+                    if depth_ratio != 1.0:
+                        # Scale bounds around center point
+                        initial_bounds = self.depth_reference["initial_bounds"]
+
+                        # Calculate centers
+                        center_x = (
+                            initial_bounds["left"] + initial_bounds["right"]
+                        ) / 2
+                        center_y = (
+                            initial_bounds["top"] + initial_bounds["bottom"]
+                        ) / 2
+
+                        # Calculate new widths/heights
+                        new_width = (
+                            initial_bounds["right"] - initial_bounds["left"]
+                        ) * depth_ratio
+                        new_height = (
+                            initial_bounds["bottom"] - initial_bounds["top"]
+                        ) * depth_ratio
+
+                        # Update bound scrollers
+                        self.left_bound_scroller.set(center_x - new_width / 2)
+                        self.right_bound_scroller.set(center_x + new_width / 2)
+                        self.top_bound_scroller.set(center_y - new_height / 2)
+                        self.bottom_bound_scroller.set(center_y + new_height / 2)
 
             if current_click != mouse_pressed:
                 if current_click:
@@ -1865,8 +1985,11 @@ class Holo(customtkinter.CTk):
             "Fill Tool": "fill",
             "Text Tool": "text",
             "Image Tool": "image",
+            "Calligraphy": "calli",  # Add calligraphy prefix
         }
         prefix = tool_prefix.get(tool_name, "element")
+        if prefix not in self.tool_counters:
+            self.tool_counters[prefix] = 0  # Initialize counter if needed
         self.tool_counters[prefix] += 1
         return f"{prefix}_{self.tool_counters[prefix]}"
 
@@ -2045,6 +2168,89 @@ class Holo(customtkinter.CTk):
                     ]
                     y_pos = palm.y * self.frame_height
                     self.bottom_bound_scroller.set(y_pos)
+
+    def configure_depth(self):
+        """Configure depth calibration based on initial hand position"""
+        if not self.camera_running or not hasattr(self, "hands"):
+            return
+
+        # Get initial frame and hand position
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
+            frame = cv2.flip(frame, 1)
+
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.hands.process(frame_rgb)
+
+        if results.multi_hand_landmarks:
+            # Get initial hand size as depth reference
+            hand_landmarks = results.multi_hand_landmarks[0]
+
+            # Calculate hand size using distance between wrist and middle finger MCP
+            wrist = hand_landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
+            middle_mcp = hand_landmarks.landmark[
+                self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP
+            ]
+
+            # Calculate initial hand size
+            initial_hand_size = math.sqrt(
+                (wrist.x - middle_mcp.x) ** 2 + (wrist.y - middle_mcp.y) ** 2
+            )
+
+            # Store initial values
+            self.depth_reference = {
+                "initial_size": initial_hand_size,
+                "initial_bounds": {
+                    "left": self.left_bound_scroller.get(),
+                    "right": self.right_bound_scroller.get(),
+                    "top": self.top_bound_scroller.get(),
+                    "bottom": self.bottom_bound_scroller.get(),
+                },
+            }
+
+            # Update depth button to show calibrated state
+            self.depth_btn.configure(text="Depth Calibrated", fg_color="green")
+
+            # Start depth tracking in camera loop
+            self.depth_tracking = True
+
+    def get_current_depth_ratio(self):
+        """Get current depth ratio from hand tracking"""
+        try:
+            if (
+                hasattr(self, "hands")
+                and self.camera_running
+                and hasattr(self, "depth_reference")
+            ):
+                ret, frame = self.cap.read()
+                if ret:
+                    if (
+                        hasattr(self, "flip_camera_enabled")
+                        and self.flip_camera_enabled
+                    ):
+                        frame = cv2.flip(frame, 1)
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    results = self.hands.process(frame_rgb)
+
+                    if results.multi_hand_landmarks:
+                        hand_landmarks = results.multi_hand_landmarks[0]
+                        wrist = hand_landmarks.landmark[
+                            self.mp_hands.HandLandmark.WRIST
+                        ]
+                        middle_mcp = hand_landmarks.landmark[
+                            self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP
+                        ]
+                        current_hand_size = math.sqrt(
+                            (wrist.x - middle_mcp.x) ** 2
+                            + (wrist.y - middle_mcp.y) ** 2
+                        )
+                        return current_hand_size / self.depth_reference["initial_size"]
+        except Exception as e:
+            print(f"Error getting depth ratio: {e}")
+        return 1.0  # Default to no scaling if something goes wrong
 
     def toggle_mouse_control(self):
         """Toggle mouse control on/off"""
