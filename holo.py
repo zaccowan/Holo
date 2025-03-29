@@ -220,6 +220,18 @@ class Holo(customtkinter.CTk):
 
     current_click = True
 
+    # Mouse velocity tracking
+    previous_mouse_pos = (0, 0)
+    velocity_threshold = 7.0  # Adjust this value to change sensitivity
+    slow_movement_factor = 0.1  # Adjust this to change how much slowdown is applied
+
+    # Separate X and Y velocity tracking
+    previous_mouse_pos = (0, 0)
+    velocity_threshold_x = 7.0  # X-axis threshold
+    velocity_threshold_y = 7.0  # Y-axis threshold
+    base_slow_factor = 0.1  # Base slowdown factor
+    min_bound_size = 100  # Minimum bound size before additional slowdown
+
     def __init__(self):
         super().__init__()
 
@@ -1504,6 +1516,7 @@ class Holo(customtkinter.CTk):
         self.flip_camera_enabled = self.flip_camera.get()
 
     def open_camera(self):
+        self.apply_win_style("acrylic")
         if not self.camera_running:
             if self.cap is None or not self.cap.isOpened():
                 # Try to open the currently selected camera
@@ -1562,6 +1575,7 @@ class Holo(customtkinter.CTk):
                     frame = cv2.flip(frame, 1)
                 opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
+            process_this_frame = not process_this_frame  # Toggle frame processing
             current_click = False
 
             # Get bounds
@@ -1607,6 +1621,7 @@ class Holo(customtkinter.CTk):
                 if distance < 0.05:  # Threshold for "OK" gesture
                     current_click = True
 
+                # Calculate raw mouse position
                 mouse_x = np.interp(
                     palm_landmark.x * self.frame_width,
                     [left_bound, right_bound],
@@ -1618,11 +1633,53 @@ class Holo(customtkinter.CTk):
                     [0, self.screen_height - 1],
                 )
 
-                # Add the new positions to the deque
+                # Calculate separate X and Y velocities
+                dx = mouse_x - self.previous_mouse_pos[0]
+                dy = mouse_y - self.previous_mouse_pos[1]
+
+                # Get bound sizes
+                bound_width = right_bound - left_bound
+                bound_height = bottom_bound - top_bound
+
+                # Calculate scaling factors based on bound sizes
+                width_scale = min(1.0, bound_width / self.min_bound_size)
+                height_scale = min(1.0, bound_height / self.min_bound_size)
+
+                # Check if mouse is over canvas
+                canvas_rect = (
+                    self.canvas.winfo_rootx(),
+                    self.canvas.winfo_rooty(),
+                    self.canvas.winfo_rootx() + self.canvas.winfo_width(),
+                    self.canvas.winfo_rooty() + self.canvas.winfo_height(),
+                )
+
+                is_over_canvas = (
+                    canvas_rect[0] <= mouse_x <= canvas_rect[2]
+                    and canvas_rect[1] <= mouse_y <= canvas_rect[3]
+                )
+
+                # Calculate adjusted slow factors with extra slowdown when over canvas
+                canvas_slowdown = 3.0 if is_over_canvas and distance < 0.05 else 1.0
+                x_slow_factor = self.base_slow_factor * width_scale / canvas_slowdown
+                y_slow_factor = (
+                    self.base_slow_factor * height_scale / 2 / canvas_slowdown
+                )
+
+                # Apply separate velocity smoothing for X and Y
+                if abs(dx) < self.velocity_threshold_x:
+                    mouse_x = self.previous_mouse_pos[0] + dx * x_slow_factor
+
+                if abs(dy) < self.velocity_threshold_y:
+                    mouse_y = self.previous_mouse_pos[1] + dy * y_slow_factor
+
+                # Update position history
+                self.previous_mouse_pos = (mouse_x, mouse_y)
+
+                # Add to smoothing deque
                 self.mouse_x_positions.append(mouse_x)
                 self.mouse_y_positions.append(mouse_y)
 
-                # Calculate the average positions
+                # Calculate smoothed position
                 smoothed_mouse_x = sum(self.mouse_x_positions) / len(
                     self.mouse_x_positions
                 )
