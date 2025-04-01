@@ -52,7 +52,7 @@ customtkinter.set_appearance_mode(DEFAULT_APPEARANCE_MODE)
 customtkinter.set_default_color_theme(DEFAULT_COLOR_THEME)
 
 
-class Holo(customtkinter.CTk):
+class Holo(BaseGUI):
     mouse_down = False
     hex_color = "#000000"
     element_size = 5
@@ -97,6 +97,7 @@ class Holo(customtkinter.CTk):
 
     def __init__(self):
         super().__init__()
+        BaseGUI.__init__(self)
 
         load_dotenv()
 
@@ -119,21 +120,6 @@ class Holo(customtkinter.CTk):
         self.mouse_smoothing = 5
         self.mouse_x_positions = collections.deque(maxlen=self.mouse_smoothing)
         self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
-
-        # configure window
-        BASE_GUI = BaseGUI(self)
-
-        # Configure tab view grid weights
-        self.tabview.grid(row=0, column=0, padx=(20, 20), pady=(10, 10), sticky="nsew")
-        self.tabview.tab("Canvas").grid_columnconfigure(
-            0, weight=3
-        )  # Give more weight to canvas
-        self.tabview.tab("Canvas").grid_columnconfigure(
-            3, weight=1
-        )  # Less weight for layer panel
-        self.tabview.tab("Canvas").grid_rowconfigure(
-            1, weight=1
-        )  # Make canvas row expandable
 
         # Canvas Frame with dynamic sizing
         self.canvas_frame = customtkinter.CTkFrame(
