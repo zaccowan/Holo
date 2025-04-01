@@ -14,6 +14,10 @@ import time
 import collections
 import pywinstyles
 
+# Import TextEntryWindow
+from GUI.TextEntry import TextEntryWindow
+from GUI.BaseGUI import BaseGUI
+
 # Imports for hand tracking and mouse manipulation
 import math
 import pyautogui
@@ -24,175 +28,35 @@ import cv2
 import numpy as np
 import threading
 
-# Import for Speech Recognition
-import vosk
-import pyaudio
-import json
-
 ## Import for AI Image Generation
 import replicate
 
+from config import (
+    DEFAULT_FRAME_WIDTH,
+    DEFAULT_FRAME_HEIGHT,
+    MIN_FRAME_WIDTH,
+    MIN_FRAME_HEIGHT,
+    ASPECT_RATIO,
+    VELOCITY_THRESHOLD_X,
+    VELOCITY_THRESHOLD_Y,
+    BASE_SLOW_FACTOR,
+    MIN_BOUND_SIZE,
+    DEFAULT_APPEARANCE_MODE,
+    DEFAULT_COLOR_THEME,
+    TOOL_DICT,
+    AI_MODELS,
+    DEFAULT_AI_MODEL,
+)
 
-customtkinter.set_appearance_mode(
-    "System"
-)  # Modes: "System" (standard), "Dark", "Light"
-customtkinter.set_default_color_theme(
-    "./holo_theme.json"
-)  # Themes: "blue" (standard), "green", "dark-blue"
-
-
-class TextEntryWindow(customtkinter.CTkToplevel):
-
-    do_stop_speech = False
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.geometry("720x720")
-        self.title("Text Entry Window")
-        self.attributes("-topmost", True)
-        self.attributes("-toolwindow", "True")
-
-        self.label = customtkinter.CTkLabel(
-            self,
-            text="Type to enter text or use Speech Recognition",
-            font=customtkinter.CTkFont(size=32),
-        )
-        self.text_entry = customtkinter.CTkTextbox(self)
-
-        self.start_speech_rec_button = customtkinter.CTkButton(
-            self,
-            text="Start Speech Recognition",
-            fg_color="#FF0000",
-            hover_color="#770000",
-            cursor="star",
-            command=self.start_speech_rec,
-        )
-        self.submit_button = customtkinter.CTkButton(
-            self, text="Submit Text", command=self.set_text_from_entry
-        )
-
-        self.label.pack(padx=20, pady=20)
-        self.text_entry.pack(padx=20, pady=20, expand=True, fill="both")
-        self.start_speech_rec_button.pack(padx=20, pady=20, expand=True, fill="both")
-        self.submit_button.pack(padx=20, pady=20, expand=False, fill="x")
-        self.text_entry.focus()
-
-        self.text_entry.bind("<Return>", command=self.submit_text)
-
-    def start_speech_rec(self):
-        self.label.destroy()
-        self.text_entry.destroy()
-        self.start_speech_rec_button.destroy()
-        self.submit_button.destroy()
-        self.speech_rec_state_label = customtkinter.CTkLabel(
-            self,
-            text="Speech Recognition Active",
-            text_color="#0000FF",
-            font=customtkinter.CTkFont(size=32),
-        )
-        self.stop_speech_rec_button = customtkinter.CTkButton(
-            self,
-            text="Stop Speech Recognition",
-            fg_color="#FF0000",
-            hover_color="#770000",
-            cursor="star",
-            command=self.stop_speech_rec,
-        )
-        self.speech_rec_state_label.pack(padx=20, pady=20)
-        self.stop_speech_rec_button.pack(padx=20, pady=20, expand=True, fill="x")
-
-        speech_recognition_thread = threading.Thread(target=self.recognize_speech)
-        speech_recognition_thread.start()
-
-    def stop_speech_rec(self):
-        self.do_stop_speech = True
-        self.stop_speech_rec_button.destroy()
-
-    def recognize_speech(self):
-
-        speech_model_path = "vosk-model-small-en-us-0.15"
-        speech_model = vosk.Model(speech_model_path)
-        rec = vosk.KaldiRecognizer(speech_model, 16000)
-
-        # Open the microphone stream
-        p = pyaudio.PyAudio()
-        stream = p.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=16000,
-            input=True,
-            frames_per_buffer=8192,
-        )
-
-        # Specify the path for the output text file
-        output_file_path = "recognized_text.txt"
-
-        # Open a text file in write mode using a 'with' block
-        with open(output_file_path, "w") as output_file:
-            # print("Listening for speech. Say 'Terminate' to stop.")
-            # Start streaming and recognize speech
-            while True:
-                data = stream.read(4096)  # read in chunks of 4096 bytes
-                if rec.AcceptWaveform(data):  # accept waveform of input voice
-                    # Parse the JSON result and get the recognized text
-                    result = json.loads(rec.Result())
-                    recognized_text = result["text"]
-                    # Check for the termination keyword
-                    if (
-                        "terminate" in recognized_text.lower()
-                        or self.do_stop_speech
-                        or not self.winfo_exists()
-                    ):
-                        # print("Termination keyword detected. Stopping...")
-                        break
-
-                    # Write recognized text to the file
-                    output_file.write(recognized_text + "\n")
-                    # print(recognized_text)
-
-        # Stop and close the stream
-        stream.stop_stream()
-        stream.close()
-        # Terminate the PyAudio object
-        p.terminate()
-
-        with open(output_file_path, "r") as output_file:
-            self.set_text_from_speech(output_file.read())
-
-        if os.path.exists(output_file_path):
-            os.remove(output_file_path)
-
-    def set_text_from_entry(self):
-        self.text = self.text_entry.get("0.0", "end")
-        app.set_canvas_text(self.text)
-        self.destroy()
-
-    def submit_text(self, event):
-        self.set_text_from_entry()
-
-    def set_text_from_speech(self, recognized_text):
-        self.text = recognized_text
-        app.set_canvas_text(self.text)
-        self.destroy()
-
-    def get_text(self):
-        return self.text
+customtkinter.set_appearance_mode(DEFAULT_APPEARANCE_MODE)
+customtkinter.set_default_color_theme(DEFAULT_COLOR_THEME)
 
 
 class Holo(customtkinter.CTk):
     mouse_down = False
     hex_color = "#000000"
     element_size = 5
-    tool_dict = {
-        0: "Circle Brush",
-        1: "Rectangle Tool",
-        2: "Fill Tool",
-        3: "Text Tool",
-        4: "Transform Tool",
-        5: "Delete Tool",
-        6: "Image Tool",
-        7: "Calligraphy",  # Add new tool
-    }
+    tool_dict = TOOL_DICT
     active_tool = "Circle Brush"
     mouse_active_coords = {
         "previous": None,
@@ -223,23 +87,22 @@ class Holo(customtkinter.CTk):
 
     # Mouse velocity tracking
     previous_mouse_pos = (0, 0)
-    velocity_threshold = 7.0  # Adjust this value to change sensitivity
-    slow_movement_factor = 0.1  # Adjust this to change how much slowdown is applied
+    velocity_threshold_x = VELOCITY_THRESHOLD_X
+    velocity_threshold_y = VELOCITY_THRESHOLD_Y
+    base_slow_factor = BASE_SLOW_FACTOR
+    min_bound_size = MIN_BOUND_SIZE
 
     # Separate X and Y velocity tracking
     previous_mouse_pos = (0, 0)
-    velocity_threshold_x = 7.0  # X-axis threshold
-    velocity_threshold_y = 7.0  # Y-axis threshold
-    base_slow_factor = 0.1  # Base slowdown factor
-    min_bound_size = 600  # Minimum bound size before additional slowdown
 
     def __init__(self):
         super().__init__()
 
         load_dotenv()
 
+        # Capture Components
         self.cap = None  # Initialize as None instead of with specific index
-        self.frame_width, self.frame_height = 1280, 720
+        self.frame_width, self.frame_height = DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_HEIGHT
 
         self.camera_thread = None
         self.camera_running = False
@@ -258,204 +121,7 @@ class Holo(customtkinter.CTk):
         self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
 
         # configure window
-        self.title("Holo")
-        self.geometry(f"{self.frame_width}x{self.frame_height}")
-        # set a minmum size for the window
-        self.minsize(1280, 720)
-
-        # Optional: Add F11 key binding to toggle fullscreen
-        self.bind("<F11>", self.toggle_fullscreen)
-        self.bind("<Escape>", lambda e: self.on_closing())
-
-        # Override the protocol method to detect window close
-        self.protocol("WM_DELETE_WINDOW", self.on_closing)
-
-        self.toplevel_window = None
-
-        self.holo_logo = tkinter.PhotoImage(file="./images/holo_transparent_scaled.png")
-        myappid = "Holo"
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-        self.wm_iconbitmap("./images/holo_transparent_scaled.png")
-        self.iconphoto(False, self.holo_logo)
-
-        # configure grid layout (4x4)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_columnconfigure((2, 3), weight=0)
-        self.grid_rowconfigure((0, 1, 2), weight=1)
-
-        ################################
-        ################################
-        # create sidebar frame with widgets
-        ################################
-        ################################
-        self.sidebar_frame = customtkinter.CTkFrame(self, width=140, corner_radius=0)
-        self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
-
-        self.sidebar_frame.grid_rowconfigure(5, weight=1)
-
-        self.logo_label = customtkinter.CTkLabel(
-            self.sidebar_frame,
-            text="Holo Tools",
-            font=customtkinter.CTkFont(size=20, weight="bold"),
-        )
-
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
-
-        self.color_label = customtkinter.CTkLabel(
-            self.sidebar_frame,
-            text=f"Element Color: {self.hex_color}",
-            fg_color=self.hex_color,
-            font=("Arial", 12),
-            padx=20,
-            pady=5,
-            corner_radius=5,
-            cursor="hand2",
-        )
-        self.color_label.bind("<Button-1>", self.choose_color)
-        self.color_label.grid(row=2, column=0, rowspan=2, padx=20, pady=(5, 50))
-
-        self.element_size_label = customtkinter.CTkLabel(
-            self.sidebar_frame,
-            text=f"Element Size: {self.element_size}",
-            font=("Arial", 12),
-            pady=10,
-        )
-
-        self.element_size_label.grid(
-            row=3,
-            column=0,
-            padx=(20, 10),
-            pady=(10, 0),
-            sticky="nsw",
-        )
-        self.element_size_slider = customtkinter.CTkSlider(
-            self.sidebar_frame,
-            from_=1,
-            to=100,
-            number_of_steps=100,
-            command=self.set_element_size,
-            progress_color="#4477AA",
-        )
-        self.element_size_slider.grid(row=4, column=0, padx=(20, 10), pady=(0, 10))
-
-        # create radiobutton frame
-        self.radiobutton_frame = customtkinter.CTkFrame(self.sidebar_frame)
-        self.radiobutton_frame.grid(
-            row=5, column=0, padx=(20, 20), pady=(20, 0), sticky="nsew"
-        )
-        self.radio_tool_var = tkinter.IntVar(value=0)
-        self.radio_tool_var.trace_add("write", callback=self.set_active_tool)
-        self.label_radio_group = customtkinter.CTkLabel(
-            master=self.radiobutton_frame, text="Select Tool:"
-        )
-        self.label_radio_group.grid(
-            row=0, column=0, columnspan=1, padx=10, pady=10, sticky="nsew"
-        )
-
-        self.radio_button_1 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=0,
-            text="Circle Brush",
-        )
-        self.radio_button_1.grid(row=1, column=0, pady=10, padx=20, sticky="nsew")
-
-        self.radio_button_2 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=1,
-            text="Rectangle Tool",
-        )
-        self.radio_button_2.grid(row=2, column=0, pady=10, padx=20, sticky="nsew")
-        self.radio_button_3 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=2,
-            text="Fill Tool",
-        )
-        self.radio_button_3.grid(row=3, column=0, pady=10, padx=20, sticky="nsew")
-        self.radio_button_4 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=3,
-            text="Text Tool",
-        )
-        self.radio_button_4.grid(row=4, column=0, pady=10, padx=20, sticky="nsew")
-        self.radio_button_5 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=4,
-            text="Transform Tool",
-        )
-        self.radio_button_5.grid(row=5, column=0, pady=10, padx=20, sticky="nsew")
-        self.radio_button_6 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=5,
-            text="Delete Tool",
-        )
-        self.radio_button_6.grid(row=6, column=0, pady=10, padx=20, sticky="nsew")
-        self.radio_button_7 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=6,
-            text="Image Tool",
-        )
-        self.radio_button_7.grid(row=7, column=0, pady=10, padx=20, sticky="nsew")
-        self.radio_button_8 = customtkinter.CTkRadioButton(
-            master=self.radiobutton_frame,
-            variable=self.radio_tool_var,
-            value=7,
-            text="Calligraphy",
-        )
-        self.radio_button_8.grid(row=8, column=0, pady=10, padx=20, sticky="nsew")
-
-        self.appearance_mode_label = customtkinter.CTkLabel(
-            self.sidebar_frame, text="Appearance Mode:", anchor="w"
-        )
-        self.appearance_mode_label.grid(row=6, column=0, padx=20, pady=(10, 0))
-        self.appearance_mode_optionemenu = customtkinter.CTkOptionMenu(
-            self.sidebar_frame,
-            values=["Light", "Dark", "System"],
-            command=self.change_appearance_mode_event,
-        )
-        self.appearance_mode_optionemenu.grid(row=7, column=0, padx=20, pady=(10, 10))
-        self.scaling_label = customtkinter.CTkLabel(
-            self.sidebar_frame, text="UI Scaling:", anchor="w"
-        )
-        self.scaling_label.grid(row=8, column=0, padx=20, pady=(10, 0), sticky="sw")
-        self.scaling_optionemenu = customtkinter.CTkOptionMenu(
-            self.sidebar_frame,
-            values=["80%", "90%", "100%", "110%", "120%"],
-            command=self.change_scaling_event,
-        )
-        self.scaling_optionemenu.grid(row=9, column=0, padx=20, pady=(10, 20))
-
-        # Main Frame
-        self.main_frame = customtkinter.CTkFrame(
-            self,
-            corner_radius=0,
-        )
-        self.main_frame.grid(row=0, rowspan=4, column=1, padx=0, pady=0, sticky="NSEW")
-        self.main_ribbon = tkinter.ttk.Notebook(self.main_frame)
-
-        # create tabview
-        self.tabview = customtkinter.CTkTabview(
-            self.main_frame,
-            bg_color="transparent",
-            fg_color="transparent",
-        )
-        self.main_frame.grid_columnconfigure(0, weight=1)
-        self.main_frame.grid_rowconfigure(0, weight=1)
-        self.tabview.grid(row=0, column=0, padx=(20, 20), pady=(10, 10), sticky="NSEW")
-        self.tabview.add("Canvas")
-        self.tabview.add("Genrated AI Image")
-        self.tabview.add("Webcam Image")
-
-        # Canvas Tab
-        # Main Frame grid configuration
-        self.main_frame.grid_columnconfigure(0, weight=1)
-        self.main_frame.grid_rowconfigure(0, weight=1)
+        BASE_GUI = BaseGUI(self)
 
         # Configure tab view grid weights
         self.tabview.grid(row=0, column=0, padx=(20, 20), pady=(10, 10), sticky="nsew")
@@ -589,10 +255,10 @@ class Holo(customtkinter.CTk):
         self.model_select_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
 
         # Add model selection dropdown
-        self.ai_model = tkinter.StringVar(value="Sketch to Image")
+        self.ai_model = tkinter.StringVar(value=DEFAULT_AI_MODEL)
         self.model_select = customtkinter.CTkOptionMenu(
             self.model_select_frame,
-            values=["Sketch to Image", "Flux Schnell", "t2i-adapter-sdxl-sketch"],
+            values=AI_MODELS,
             variable=self.ai_model,
             width=200,
         )
@@ -854,12 +520,12 @@ class Holo(customtkinter.CTk):
 
         # Load icons
         self.trash_icon = customtkinter.CTkImage(
-            light_image=Image.open("./images/trash-icon-black.png"),
-            dark_image=Image.open("./images/trash-icon-white.png"),
+            light_image=Image.open("./assets/images/trash-icon-black.png"),
+            dark_image=Image.open("./assets/images/trash-icon-white.png"),
         )
         self.edit_icon = customtkinter.CTkImage(
-            light_image=Image.open("./images/edit-icon-black.png"),
-            dark_image=Image.open("./images/edit-icon-white.png"),
+            light_image=Image.open("./assets/images/edit-icon-black.png"),
+            dark_image=Image.open("./assets/images/edit-icon-white.png"),
         )
 
         self.apply_win_style("acrylic")
@@ -955,7 +621,9 @@ class Holo(customtkinter.CTk):
                 self.transform_active = False
                 self.transform_tags.clear()
 
-    def open_text_entry_window(self):
+    def open_text_entry_window(
+        self,
+    ):
         if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
             self.toplevel_window = TextEntryWindow(
                 self
@@ -2057,18 +1725,17 @@ class Holo(customtkinter.CTk):
             frame_width = self.canvas_frame.winfo_width()
             frame_height = self.canvas_frame.winfo_height()
 
-            # Maintain aspect ratio (16:9)
-            aspect_ratio = 16 / 9
-
-            # Calculate new dimensions maintaining aspect ratio
-            if frame_width / frame_height > aspect_ratio:
-                # Width is too wide, constrain by height
+            # Maintain aspect ratio
+            if frame_width / frame_height > ASPECT_RATIO:
                 new_height = frame_height
-                new_width = int(new_height * aspect_ratio)
+                new_width = int(new_height * ASPECT_RATIO)
             else:
-                # Height is too tall, constrain by width
                 new_width = frame_width
-                new_height = int(new_width / aspect_ratio)
+                new_height = int(new_width / ASPECT_RATIO)
+
+            # Ensure minimum dimensions
+            new_width = max(new_width, MIN_FRAME_WIDTH)
+            new_height = max(new_height, MIN_FRAME_HEIGHT)
 
             # Configure canvas size
             self.canvas.configure(width=new_width, height=new_height)
