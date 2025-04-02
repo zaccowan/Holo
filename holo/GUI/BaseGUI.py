@@ -1,6 +1,11 @@
 import ctypes
 import tkinter
 import customtkinter
+
+# Import Function Modules
+from utilities import Utilities
+
+# System Imports
 import sys
 from pathlib import Path
 
@@ -234,7 +239,7 @@ class BaseGUI(customtkinter.CTk):
         self.main_frame.grid_rowconfigure(0, weight=1)
         self.tabview.grid(row=0, column=0, padx=(20, 20), pady=(10, 10), sticky="NSEW")
         self.tabview.add("Canvas")
-        self.tabview.add("Genrated AI Image")
+        self.tabview.add("Generated AI Image")
         self.tabview.add("Webcam Image")
 
         # Canvas Tab

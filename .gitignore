@@ -1,9 +1,4 @@
-complex_example.py
-deep_image.py
-hand_track.py
-deepseekHands.py
 recognized_text.txt
-speech.py
 
 holo.cmd
 holo.exe
@@ -11,3 +6,6 @@ nuitka-crash-report.xml
 *.png
 *.jpg
 .env
+
+*.pdb
+*.pyc

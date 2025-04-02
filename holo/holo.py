@@ -2,14 +2,12 @@
 import base64
 import os
 from dotenv import load_dotenv
-import sys
 import tkinter
 import tkinter.messagebox
 import tkinter.ttk
 import customtkinter
 from tkinter import colorchooser, filedialog
-from PIL import ImageGrab, Image, ImageTk, ImageOps
-import ctypes
+from PIL import ImageGrab, Image, ImageTk
 import time
 import collections
 import pywinstyles
@@ -17,6 +15,9 @@ import pywinstyles
 # Import TextEntryWindow
 from GUI.TextEntry import TextEntryWindow
 from GUI.BaseGUI import BaseGUI
+
+# Import Function Modules
+from utilities import Utilities
 
 # Imports for hand tracking and mouse manipulation
 import math
@@ -46,6 +47,29 @@ from config import (
     TOOL_DICT,
     AI_MODELS,
     DEFAULT_AI_MODEL,
+)
+
+from functions.toolbarFunctions import choose_color, set_element_size, set_active_tool
+from functions.canvasMouseFunctions import (
+    mouse_move,
+    update_temp_bbox,
+    canvas_mouse_down,
+    canvas_mouse_release,
+)
+from functions.layerPanelFunctions import (
+    add_layer_to_panel,
+    delete_layer,
+    reposition_layers,
+    select_layer,
+    edit_layer_color,
+)
+from functions.webcamFunctions import (
+    list_available_cameras,
+    change_camera,
+    toggle_camera_flip,
+    open_camera,
+    camera_loop,
+    close_camera,
 )
 
 customtkinter.set_appearance_mode(DEFAULT_APPEARANCE_MODE)
@@ -93,7 +117,7 @@ class Holo(BaseGUI):
     min_bound_size = MIN_BOUND_SIZE
 
     # Separate X and Y velocity tracking
-    previous_mouse_pos = (0, 0)
+    # (Removed duplicate definition of previous_mouse_pos)
 
     def __init__(self):
         super().__init__()
@@ -184,7 +208,7 @@ class Holo(BaseGUI):
             master=self.tabview.tab("Canvas"),
             fg_color="transparent",
             border_width=2,
-            text="Generate AI Image",
+            text="Generated AI Image",
             text_color=("gray10", "#DCE4EE"),
             command=self.generate_ai_image,
         )
@@ -229,14 +253,14 @@ class Holo(BaseGUI):
         self.layer_buttons = {}
 
         # Generated AI Image Tab
-        self.tabview.tab("Genrated AI Image").columnconfigure(0, weight=1)
-        self.tabview.tab("Genrated AI Image").rowconfigure(
+        self.tabview.tab("Generated AI Image").columnconfigure(0, weight=1)
+        self.tabview.tab("Generated AI Image").rowconfigure(
             1, weight=1
         )  # Changed from 0 to 1
 
         # Add model selection frame
         self.model_select_frame = customtkinter.CTkFrame(
-            self.tabview.tab("Genrated AI Image")
+            self.tabview.tab("Generated AI Image")
         )
         self.model_select_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
 
@@ -252,7 +276,7 @@ class Holo(BaseGUI):
 
         # Move existing label to row 1
         self.gen_ai_image_label = customtkinter.CTkLabel(
-            self.tabview.tab("Genrated AI Image"),
+            self.tabview.tab("Generated AI Image"),
             text="Waiting for AI Generated Image (this may take time)",
         )
         self.gen_ai_image_label.grid(row=1, column=0)
@@ -524,7 +548,6 @@ class Holo(BaseGUI):
 
     def apply_win_style(self, style_name):
         pywinstyles.apply_style(self, style_name)
-
         pywinstyles.set_opacity(self.canvas, 1)
         pywinstyles.set_opacity(self.webcam_image_label, 1)
         pywinstyles.set_opacity(self.gen_ai_image_label, 1)
@@ -546,66 +569,13 @@ class Holo(BaseGUI):
     ################################
 
     def choose_color(self, event):
-        self.color_code = colorchooser.askcolor(title="Choose color")
-        if self.color_code:
-            self.hex_color = self.color_code[1]
-            self.color_label.configure(
-                text=f"Element Color: {self.hex_color}", fg_color=self.hex_color
-            )
+        choose_color(self, event)
 
     def set_element_size(self, event):
-        self.element_size = int(self.element_size_slider.get())
-        self.element_size_label.configure(text=f"Element Size: {self.element_size}")
+        set_element_size(self, event)
 
     def set_active_tool(self, *args):
-        self.active_tool = self.tool_dict.get(self.radio_tool_var.get())
-        match self.active_tool:
-            case "Circle Brush":
-                self.canvas.configure(cursor="circle")
-                self.transform_controls.grid_remove()  # Hide controls
-                self.transform_active = False
-                self.transform_tags.clear()
-
-            case "Rectangle Tool":
-                self.canvas.configure(cursor="tcross")
-                self.transform_controls.grid_remove()  # Hide controls
-                self.transform_active = False
-                self.transform_tags.clear()
-
-            case "Fill Tool":
-                self.canvas.configure(cursor="spraycan")
-                self.transform_controls.grid_remove()  # Hide controls
-                self.transform_active = False
-                self.transform_tags.clear()
-
-            case "Text Tool":
-                self.canvas.configure(cursor="xterm")
-                self.transform_controls.grid_remove()  # Hide controls
-                self.transform_active = False
-                self.transform_tags.clear()
-
-            case "Transform Tool":
-                self.canvas.configure(cursor="fleur")
-                # Show transform controls
-                self.transform_controls.grid(
-                    row=0, column=0, columnspan=3, sticky="ew", pady=(0, 5)
-                )
-                # Initialize transform state
-                self.transform_mode = "move"
-                self.move_btn.configure(fg_color="#4477AA")
-                self.scale_btn.configure(fg_color="transparent")
-
-            case "Delete Tool":
-                self.canvas.configure(cursor="X_cursor")
-                self.transform_controls.grid_remove()  # Hide controls
-                self.transform_active = False
-                self.transform_tags.clear()
-
-            case "Image Tool":
-                self.canvas.configure(cursor="plus")
-                self.transform_controls.grid_remove()  # Hide controls
-                self.transform_active = False
-                self.transform_tags.clear()
+        set_active_tool(self, *args)
 
     def open_text_entry_window(
         self,
@@ -630,482 +600,38 @@ class Holo(BaseGUI):
         self.add_layer_to_panel(stroke_tag)
 
     ################################
-    # Canvas Mouse Events
+    # Canvas Drawing Events
     ################################
 
     def mouse_move(self, event):
-        self.canvas.delete("temp_bbox")
-        if self.mouse_down:
-            self.mouse_active_coords["previous"] = self.mouse_active_coords["current"]
-            self.mouse_active_coords["current"] = (event.x, event.y)
-
-            if (
-                self.mouse_active_coords["previous"]
-                != self.mouse_active_coords["current"]
-                and self.mouse_active_coords["previous"] is not None
-            ):
-                match self.active_tool:
-                    case "Circle Brush":
-                        # Get stroke tag only once when starting a new stroke
-                        if not hasattr(self, "current_brush_tag"):
-                            self.current_brush_tag = self.get_stroke_tag(
-                                self.active_tool
-                            )
-                            self.add_layer_to_panel(self.current_brush_tag)
-
-                        self.canvas.create_line(
-                            self.mouse_active_coords["previous"][0],
-                            self.mouse_active_coords["previous"][1],
-                            self.mouse_active_coords["current"][0],
-                            self.mouse_active_coords["current"][1],
-                            fill=self.hex_color,
-                            width=self.element_size,
-                            capstyle=tkinter.ROUND,
-                            smooth=True,
-                            splinesteps=36,
-                            tags=self.current_brush_tag,
-                        )
-                    case "Rectangle Tool":
-                        self.temp_rect = None
-                        if self.mouse_down:
-                            self.canvas.delete("temp_rect")
-                            self.temp_rect = self.canvas.create_rectangle(
-                                self.mouse_down_canvas_coords[0],
-                                self.mouse_down_canvas_coords[1],
-                                event.x,
-                                event.y,
-                                width=self.element_size,
-                                fill=str(self.hex_color),
-                                tags="temp_rect",
-                            )
-                    case "Transform Tool":
-                        if self.transform_active:
-                            match self.transform_mode:
-                                case "move":
-                                    dx = event.x - self.mouse_down_canvas_coords[0]
-                                    dy = event.y - self.mouse_down_canvas_coords[1]
-                                    for tag in self.transform_tags:
-                                        self.canvas.move(tag, dx, dy)
-                                    self.canvas.move("temp_bbox", dx, dy)
-
-                                case "scale":
-                                    for tag in self.transform_tags:
-                                        bbox = self.canvas.bbox(tag)
-                                        if bbox:
-                                            center_x = (bbox[0] + bbox[2]) / 2
-                                            center_y = (bbox[1] + bbox[3]) / 2
-
-                                            # Calculate distance from center
-                                            current_dist = math.sqrt(
-                                                (event.x - center_x) ** 2
-                                                + (event.y - center_y) ** 2
-                                            )
-                                            start_dist = math.sqrt(
-                                                (
-                                                    self.mouse_down_canvas_coords[0]
-                                                    - center_x
-                                                )
-                                                ** 2
-                                                + (
-                                                    self.mouse_down_canvas_coords[1]
-                                                    - center_y
-                                                )
-                                                ** 2
-                                            )
-
-                                            if start_dist > 0:
-                                                scale = current_dist / start_dist
-                                                scale = max(0.1, min(scale, 5.0))
-                                                self.canvas.scale(
-                                                    tag,
-                                                    center_x,
-                                                    center_y,
-                                                    scale,
-                                                    scale,
-                                                )
-
-                                                # Update bounding box
-                                                self.canvas.delete("temp_bbox")
-                                                new_bbox = self.canvas.bbox(tag)
-                                                if new_bbox:
-                                                    self.canvas.create_rectangle(
-                                                        new_bbox[0] - 20,
-                                                        new_bbox[1] - 20,
-                                                        new_bbox[2] + 20,
-                                                        new_bbox[3] + 20,
-                                                        outline="#555555",
-                                                        width=5,
-                                                        tags="temp_bbox",
-                                                    )
-
-                            self.mouse_down_canvas_coords = (event.x, event.y)
-                        else:
-                            self.update_temp_bbox(event)
-                    case "Calligraphy":
-                        if self.mouse_down:
-                            # Get current hand depth if available
-                            depth_ratio = 1.0
-                            if (
-                                hasattr(self, "depth_tracking")
-                                and self.depth_tracking
-                                and hasattr(self, "depth_reference")
-                            ):
-                                depth_ratio = self.get_current_depth_ratio()
-
-                            # Adjust stroke width based on depth
-                            stroke_width = self.element_size * depth_ratio
-
-                            # Get stroke tag only once when starting a new stroke
-                            if not hasattr(self, "current_calli_tag"):
-                                self.current_calli_tag = self.get_stroke_tag(
-                                    self.active_tool
-                                )
-                                self.add_layer_to_panel(self.current_calli_tag)
-
-                            # Create calligraphy stroke
-                            self.canvas.create_line(
-                                self.mouse_active_coords["previous"][0],
-                                self.mouse_active_coords["previous"][1],
-                                self.mouse_active_coords["current"][0],
-                                self.mouse_active_coords["current"][1],
-                                fill=self.hex_color,
-                                width=stroke_width,
-                                capstyle=tkinter.ROUND,
-                                smooth=True,
-                                splinesteps=72,  # Double the spline steps for smoother curves
-                                tags=self.current_calli_tag,
-                            )
-        else:
-            match self.active_tool:
-                case "Delete Tool":
-                    self.update_temp_bbox(event)
-                case "Transform Tool":
-                    self.update_temp_bbox(event)
-                    item = self.canvas.find_closest(event.x, event.y)[0]
-                    tag = self.canvas.gettags(item)
-                    if not self.transform_active:
-                        self.transform_active = True
-                        self.transform_tags = [tag[0]]
-                        # Show bounding box for selected stroke
-                        self.canvas.delete("temp_bbox")
-                        bbox = self.canvas.bbox(tag[0])
-                        if bbox:
-                            self.canvas.create_rectangle(
-                                bbox[0] - 20,
-                                bbox[1] - 20,
-                                bbox[2] + 20,
-                                bbox[3] + 20,
-                                outline="#555555",
-                                width=5,
-                                tags="temp_bbox",
-                            )
-                    elif tag[0] not in self.transform_tags:
-                        self.transform_active = False
-                        self.transform_tags.clear()
+        mouse_move(self, event)
 
     def update_temp_bbox(self, event):
-        self.canvas.delete("temp_bbox")
-        item = self.canvas.find_closest(event.x, event.y)
-        if item:
-            tag = self.canvas.gettags(item[0])
-            if tag:
-                self.active_bbox = self.canvas.bbox(tag[0])
-                if self.active_tool == "Delete Tool":
-                    outline_color = "#FF5555"  # Slightly red color
-                else:
-                    outline_color = "#555555"
-                self.canvas.create_rectangle(
-                    self.active_bbox[0] - 20,
-                    self.active_bbox[1] - 20,
-                    self.active_bbox[2] + 20,
-                    self.active_bbox[3] + 20,
-                    outline=outline_color,
-                    width=5,
-                    tags="temp_bbox",
-                )
+        update_temp_bbox(self, event)
 
     def canvas_mouse_down(self, event):
-        self.mouse_down = True
-        self.mouse_down_canvas_coords = (event.x, event.y)
-        # Initialize current position for brush strokes
-        self.mouse_active_coords["current"] = (event.x, event.y)
-        match self.active_tool:
-            case "Transform Tool":
-                item = self.canvas.find_closest(event.x, event.y)[0]
-                tag = self.canvas.gettags(item)
-                if not self.transform_active:
-                    self.transform_active = True
-                    self.transform_tags = [tag[0]]
-                    # Show bounding box for selected stroke
-                    self.canvas.delete("temp_bbox")
-                    bbox = self.canvas.bbox(tag[0])
-                    if bbox:
-                        self.canvas.create_rectangle(
-                            bbox[0] - 20,
-                            bbox[1] - 20,
-                            bbox[2] + 20,
-                            bbox[3] + 20,
-                            outline="#555555",
-                            width=5,
-                            tags="temp_bbox",
-                        )
-                elif tag[0] not in self.transform_tags:
-                    self.transform_active = False
-                    self.transform_tags.clear()
+        canvas_mouse_down(self, event)
 
     def canvas_mouse_release(self, event):
-        self.mouse_down = False
-        self.mouse_active_coords["previous"] = None
-        self.mouse_active_coords["current"] = None
-        self.mouse_release_canvas_coords = (event.x, event.y)
-
-        # Clear brush tag when stroke is complete
-        if hasattr(self, "current_brush_tag"):
-            delattr(self, "current_brush_tag")
-
-        # Clear stroke tags when stroke is complete
-        if hasattr(self, "current_calli_tag"):
-            delattr(self, "current_calli_tag")
-
-        match self.active_tool:
-            case "Circle Brush":
-                pass
-            case "Rectangle Tool":
-                self.canvas.delete("temp_rect")
-                stroke_tag = self.get_stroke_tag(self.active_tool)
-                self.canvas.create_rectangle(
-                    self.mouse_down_canvas_coords[0],
-                    self.mouse_down_canvas_coords[1],
-                    self.mouse_release_canvas_coords[0],
-                    self.mouse_release_canvas_coords[1],
-                    width=self.element_size,
-                    fill=str(self.hex_color),
-                    outline=str(self.hex_color),
-                    tags=stroke_tag,
-                )
-                self.add_layer_to_panel(stroke_tag)
-            case "Text Tool":
-                self.open_text_entry_window()
-            case "Delete Tool":
-                self.canvas.delete("temp_bbox")
-                item = self.canvas.find_closest(event.x, event.y)[0]
-                tag = self.canvas.gettags(item)
-                if tag and "_" in tag[0]:  # Check for any valid element tag
-                    self.delete_layer(tag[0])
-            case "Image Tool":
-                file_path = filedialog.askopenfilename(
-                    filetypes=[("Image files", "*.png *.jpg *.jpeg *.gif *.bmp *.tiff")]
-                )
-                if file_path:
-                    self.place_image(file_path, event.x, event.y)
-            case "Fill Tool":
-                stroke_tag = self.get_stroke_tag(self.active_tool)
-                self.canvas.create_rectangle(
-                    0,
-                    0,
-                    self.canvas.winfo_width(),
-                    self.canvas.winfo_height(),
-                    fill=self.hex_color,
-                    tags=stroke_tag,
-                )
-                self.add_layer_to_panel(stroke_tag)
+        canvas_mouse_release(self, event)
 
     ################################
     # Layer Window
     ################################
     def add_layer_to_panel(self, stroke_tag):
-        layer_frame = customtkinter.CTkFrame(self.layer_container)
-        layer_frame.grid(
-            row=len(self.layer_buttons), column=0, pady=2, padx=5, sticky="nsw"
-        )
-        layer_frame.grid_columnconfigure(0, weight=1)
-
-        # Create more descriptive label
-        tool_type, number = stroke_tag.split("_")
-        label_text = f"{tool_type.capitalize()} {number}"
-
-        # Make the label clickable and highlight on hover
-        layer_label = customtkinter.CTkLabel(
-            layer_frame,
-            text=label_text,
-            cursor="hand2",
-        )
-        layer_label.grid(row=0, column=0, pady=2, padx=5, sticky="w")
-
-        # Bind click event to select the stroke
-        layer_label.bind("<Button-1>", lambda e, tag=stroke_tag: self.select_layer(tag))
-
-        # Dictionary to store buttons for managing references
-        buttons = {}
-        next_column = 1
-
-        # Handle color edit button
-        if tool_type in ["brush", "rect", "fill", "text"]:
-            edit_button = customtkinter.CTkButton(
-                layer_frame,
-                text="",
-                width=24,
-                height=24,
-                image=self.edit_icon,
-                command=lambda t=stroke_tag: self.edit_layer_color(t),
-            )
-            edit_button.grid(row=0, column=next_column, pady=2, padx=2)
-            buttons["edit_button"] = edit_button
-            next_column += 1
-
-        # Add text edit button only for text elements
-        if tool_type == "text":
-            edit_text_button = customtkinter.CTkButton(
-                layer_frame,
-                text="Edit Text",
-                width=60,
-                height=24,
-                command=lambda t=stroke_tag: self.edit_layer_text(t),
-            )
-            edit_text_button.grid(row=0, column=next_column, pady=2, padx=2)
-            buttons["edit_text_button"] = edit_text_button
-            next_column += 1
-
-        # Delete button with icon
-        delete_button = customtkinter.CTkButton(
-            layer_frame,
-            text="",
-            width=24,
-            height=24,
-            image=self.trash_icon,
-            command=lambda t=stroke_tag: self.delete_layer(t),
-        )
-        delete_button.grid(row=0, column=next_column, pady=2, padx=2)
-        buttons["delete_button"] = delete_button
-
-        # Store all components in the layer_buttons dictionary
-        self.layer_buttons[stroke_tag] = {
-            "frame": layer_frame,
-            "label": layer_label,
-            **buttons,  # Unpack the buttons dictionary
-        }
+        add_layer_to_panel(self, stroke_tag)
 
     def delete_layer(self, stroke_tag):
-        """Delete a layer and update counters"""
-        # Delete the stroke from canvas
-        self.canvas.delete(stroke_tag)
+        delete_layer(self, stroke_tag)
 
-        # Update the counter for the tool type
-        tool_type, number = stroke_tag.split("_")
-        if tool_type in self.tool_counters:
-            self.tool_counters[tool_type] = max(
-                self.tool_counters[tool_type], int(number)
-            )
-
-        # Delete the UI components
-        if stroke_tag in self.layer_buttons:
-            layer_info = self.layer_buttons[stroke_tag]
-            layer_info["frame"].destroy()
-            del self.layer_buttons[stroke_tag]
-            self._reposition_layers()
-
-    def _reposition_layers(self):
-        for idx, (tag, layer_info) in enumerate(self.layer_buttons.items()):
-            layer_info["frame"].grid(row=idx, column=0, pady=2, padx=5, sticky="ew")
+    def reposition_layers(self):
+        reposition_layers(self)
 
     def select_layer(self, stroke_tag):
-        # Check if layer is already selected
-        if hasattr(self, "selected_layer") and self.selected_layer == stroke_tag:
-            # Layer is already selected, show color picker
-            color_code = colorchooser.askcolor(
-                title="Choose stroke color",
-                color=self.canvas.itemcget(stroke_tag, "fill"),
-            )
-            if color_code:
-                # Update the stroke color
-                if "brush" in stroke_tag or "rect" in stroke_tag:
-                    self.canvas.itemconfig(stroke_tag, fill=color_code[1])
-                    if "rect" in stroke_tag:
-                        self.canvas.itemconfig(stroke_tag, outline=color_code[1])
-                elif "text" in stroke_tag:
-                    self.canvas.itemconfig(stroke_tag, fill=color_code[1])
-                elif "fill" in stroke_tag:
-                    self.canvas.itemconfig(stroke_tag, fill=color_code[1])
-        else:
-            # Reset previous selections
-            for layer_info in self.layer_buttons.values():
-                layer_info["frame"].configure(fg_color=("gray86", "gray17"))
-                layer_info["label"].configure(fg_color=("gray86", "gray17"))
-
-            # Highlight selected layer
-            self.layer_buttons[stroke_tag]["frame"].configure(
-                fg_color=("#4477AA", "#4477AA")
-            )
-            self.layer_buttons[stroke_tag]["label"].configure(
-                fg_color=("#4477AA", "#4477AA")
-            )
-
-            # Set transform tool as active
-            self.radio_tool_var.set(4)  # Index for Transform Tool
-            self.transform_active = True
-            self.transform_tags = [stroke_tag]
-            self.selected_layer = stroke_tag
-
-            # Show bounding box for selected stroke
-            self.canvas.delete("temp_bbox")
-            bbox = self.canvas.bbox(stroke_tag)
-            if bbox:
-                self.canvas.create_rectangle(
-                    bbox[0] - 20,
-                    bbox[1] - 20,
-                    bbox[2] + 20,
-                    bbox[3] + 20,
-                    outline="#555555",
-                    width=5,
-                    tags="temp_bbox",
-                )
+        select_layer(self, stroke_tag)
 
     def edit_layer_color(self, stroke_tag):
-        """Edit the color of a layer"""
-        color_code = colorchooser.askcolor(
-            title="Choose stroke color",
-            color=self.canvas.itemcget(stroke_tag, "fill"),
-        )
-        if color_code:
-            # Update the stroke color based on type
-            if "brush" in stroke_tag or "rect" in stroke_tag:
-                self.canvas.itemconfig(stroke_tag, fill=color_code[1])
-                if "rect" in stroke_tag:
-                    self.canvas.itemconfig(stroke_tag, outline=color_code[1])
-            elif "text" in stroke_tag:
-                self.canvas.itemconfig(stroke_tag, fill=color_code[1])
-            elif "fill" in stroke_tag:
-                self.canvas.itemconfig(stroke_tag, fill=color_code[1])
-
-    def edit_layer_text(self, stroke_tag):
-        """Change the font size of a text element"""
-        try:
-            # Get current text
-            current_text = self.canvas.itemcget(stroke_tag, "text")
-
-            # Create new font with current element_size
-            new_font = customtkinter.CTkFont(size=self.element_size)
-
-            # Update the text element's font
-            self.canvas.itemconfig(stroke_tag, font=new_font)
-
-            # Update bounding box if transform tool is active
-            if self.transform_active and stroke_tag in self.transform_tags:
-                self.canvas.delete("temp_bbox")
-                bbox = self.canvas.bbox(stroke_tag)
-                if bbox:
-                    self.canvas.create_rectangle(
-                        bbox[0] - 20,
-                        bbox[1] - 20,
-                        bbox[2] + 20,
-                        bbox[3] + 20,
-                        outline="#555555",
-                        width=5,
-                        tags="temp_bbox",
-                    )
-
-        except Exception as e:
-            print(f"Error updating text size: {e}")
+        edit_layer_color(self, stroke_tag)
 
     ################################
     # Canvas Saving and AI Generation
@@ -1223,322 +749,22 @@ class Holo(BaseGUI):
     ################################
 
     def list_available_cameras(self):
-        available_ports = []
-        for i in range(4):
-            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-            if cap.isOpened():
-                ret, _ = cap.read()
-                if ret:
-                    available_ports.append(i)
-                cap.release()
-        return available_ports
+        return list_available_cameras(self)
 
     def change_camera(self, selection):
-        if self.camera_running:
-            self.close_camera()
-        camera_index = int(selection.replace("Camera ", ""))
-        self.cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+        change_camera(self, selection)
 
     def toggle_camera_flip(self):
-        self.flip_camera_enabled = self.flip_camera.get()
+        toggle_camera_flip(self)
 
     def open_camera(self):
-        self.apply_win_style("acrylic")
-        if not self.camera_running:
-            if self.cap is None or not self.cap.isOpened():
-                # Try to open the currently selected camera
-                selected_camera = self.camera_select.get()
-                camera_index = int(selected_camera.replace("Camera ", ""))
-                self.cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+        open_camera(self)
 
-                if not self.cap.isOpened():
-                    print(f"Failed to open camera {camera_index}")
-                    return
-
-            self.camera_running = True
-            self.stop_event.clear()
-            self.camera_thread = threading.Thread(target=self._camera_loop)
-            self.camera_thread.start()
-            self.open_camera_btn.configure(state="disabled")
-            self.close_camera_btn.configure(state="normal")
-            self.webcam_image_label.configure(text="")
-
-    def _camera_loop(self):
-        mouse_pressed = False
-        process_this_frame = True  # Add frame skip counter
-
-        while (
-            self.camera_running
-            and self.cap is not None
-            and self.cap.isOpened()
-            and not self.stop_event.is_set()
-        ):
-            start_time = time.time()
-            ret, frame = self.cap.read()
-            if not ret:
-                break
-
-            # Process every other frame
-            if process_this_frame:
-                # Resize frame for faster processing
-                small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
-
-                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
-                    small_frame = cv2.flip(small_frame, 1)
-
-                # Convert and process
-                opencv_image = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-                results = self.hands.process(opencv_image)
-
-                # Scale back up for display
-                opencv_image = cv2.resize(
-                    opencv_image, (self.frame_width, self.frame_height)
-                )
-            else:
-                # Just flip if needed without processing
-                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
-                    frame = cv2.flip(frame, 1)
-                opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            process_this_frame = not process_this_frame  # Toggle frame processing
-            current_click = False
-
-            # Get bounds
-            left_bound = self.left_bound_scroller.get()
-            right_bound = self.right_bound_scroller.get()
-            top_bound = self.top_bound_scroller.get()
-            bottom_bound = self.bottom_bound_scroller.get()
-
-            # Draw bounding box
-            opencv_image = cv2.rectangle(
-                opencv_image,
-                (int(left_bound), int(top_bound)),
-                (int(right_bound), int(bottom_bound)),
-                (255, 255, 255),
-                5,
-            )
-
-            if results.multi_hand_landmarks:
-                hand_landmarks = results.multi_hand_landmarks[0]
-                index_tip_landmark = hand_landmarks.landmark[
-                    self.mp_hands.HandLandmark.INDEX_FINGER_TIP
-                ]
-                thumb_tip_landmark = hand_landmarks.landmark[
-                    self.mp_hands.HandLandmark.THUMB_TIP
-                ]
-                palm_landmark = hand_landmarks.landmark[
-                    self.mp_hands.HandLandmark.WRIST
-                ]
-                finger_distance = math.hypot(
-                    index_tip_landmark.x - thumb_tip_landmark.x,
-                    index_tip_landmark.y - thumb_tip_landmark.y,
-                )
-                cv2.putText(
-                    opencv_image,
-                    "finger_distance: " + str(finger_distance)[:6],
-                    (30, 50),
-                    1,
-                    2,
-                    (255, 255, 100),
-                    2,
-                )
-
-                if finger_distance < 0.05:  # Threshold for "OK" gesture
-                    current_click = True
-
-                # Calculate raw mouse position
-                mouse_x = np.interp(
-                    palm_landmark.x * self.frame_width,
-                    [left_bound, right_bound],
-                    [0, self.screen_width - 1],
-                )
-                mouse_y = np.interp(
-                    palm_landmark.y * self.frame_height,
-                    [top_bound, bottom_bound],
-                    [0, self.screen_height - 1],
-                )
-
-                # Calculate separate X and Y velocities
-                dx = mouse_x - self.previous_mouse_pos[0]
-                dy = mouse_y - self.previous_mouse_pos[1]
-
-                # Get bound sizes
-                bound_width = right_bound - left_bound
-                bound_height = bottom_bound - top_bound
-
-                # Calculate scaling factors based on bound sizes
-                width_scale = min(1.0, bound_width / self.min_bound_size)
-                height_scale = min(1.0, bound_height / self.min_bound_size)
-
-                # Check if mouse is over canvas
-                canvas_rect = (
-                    self.canvas.winfo_rootx(),
-                    self.canvas.winfo_rooty(),
-                    self.canvas.winfo_rootx() + self.canvas.winfo_width(),
-                    self.canvas.winfo_rooty() + self.canvas.winfo_height(),
-                )
-
-                is_over_canvas = (
-                    canvas_rect[0] <= mouse_x <= canvas_rect[2]
-                    and canvas_rect[1] <= mouse_y <= canvas_rect[3]
-                )
-
-                # Calculate adjusted slow factors with extra slowdown when over canvas
-                canvas_slowdown = (
-                    3.0 if is_over_canvas and finger_distance < 0.05 else 1.0
-                )
-                x_slow_factor = self.base_slow_factor * width_scale / canvas_slowdown
-                y_slow_factor = (
-                    self.base_slow_factor * height_scale / 2 / canvas_slowdown
-                )
-
-                # Apply separate velocity smoothing for X and Y
-                if abs(dx) < self.velocity_threshold_x:
-                    mouse_x = self.previous_mouse_pos[0] + dx * x_slow_factor
-
-                if abs(dy) < self.velocity_threshold_y:
-                    mouse_y = self.previous_mouse_pos[1] + dy * y_slow_factor
-
-                # Update position history
-                self.previous_mouse_pos = (mouse_x, mouse_y)
-
-                # Add to smoothing deque
-                self.mouse_x_positions.append(mouse_x)
-                self.mouse_y_positions.append(mouse_y)
-
-                # Calculate smoothed position
-                smoothed_mouse_x = sum(self.mouse_x_positions) / len(
-                    self.mouse_x_positions
-                )
-                smoothed_mouse_y = sum(self.mouse_y_positions) / len(
-                    self.mouse_y_positions
-                )
-
-                if (
-                    hasattr(self, "mouse_control_enabled")
-                    and self.mouse_control_enabled
-                ):
-                    pyautogui.moveTo(int(smoothed_mouse_x), int(smoothed_mouse_y))
-
-                self.mp_drawing.draw_landmarks(
-                    opencv_image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
-                )
-
-                # Add depth tracking logic
-                if hasattr(self, "depth_tracking") and self.depth_tracking:
-                    # Calculate current hand size
-                    wrist = hand_landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
-                    middle_mcp = hand_landmarks.landmark[
-                        self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP
-                    ]
-                    current_hand_size = math.sqrt(
-                        (wrist.x - middle_mcp.x) ** 2 + (wrist.y - middle_mcp.y) ** 2
-                    )
-
-                    # Calculate depth ratio
-                    depth_ratio = (
-                        current_hand_size / self.depth_reference["initial_size"]
-                    )
-
-                    # Adjust bounds based on depth
-                    if depth_ratio != 1.0:
-                        # Scale bounds around center point
-                        initial_bounds = self.depth_reference["initial_bounds"]
-
-                        # Calculate centers
-                        center_x = (
-                            initial_bounds["left"] + initial_bounds["right"]
-                        ) / 2
-                        center_y = (
-                            initial_bounds["top"] + initial_bounds["bottom"]
-                        ) / 2
-
-                        # Calculate new widths/heights
-                        new_width = (
-                            initial_bounds["right"] - initial_bounds["left"]
-                        ) * depth_ratio
-                        new_height = (
-                            initial_bounds["bottom"] - initial_bounds["top"]
-                        ) * depth_ratio
-
-                        # Update bound scrollers
-                        self.left_bound_scroller.set(center_x - new_width / 2)
-                        self.right_bound_scroller.set(center_x + new_width / 2)
-                        self.top_bound_scroller.set(center_y - new_height / 2)
-                        self.bottom_bound_scroller.set(center_y + new_height / 2)
-
-            if current_click != mouse_pressed:
-                if current_click:
-                    pyautogui.mouseDown()
-                    mouse_pressed = True
-                else:
-                    pyautogui.mouseUp()
-                    mouse_pressed = False
-
-            if not results.multi_hand_landmarks and mouse_pressed:
-                pyautogui.mouseUp()
-                mouse_pressed = False
-
-            # Get current label size for dynamic image scaling
-            label_width = self.webcam_image_label.winfo_width()
-            label_height = self.webcam_image_label.winfo_height()
-
-            # Ensure minimum dimensions
-            display_width = max(int(self.frame_width * 0.6), 800)
-            display_height = max(
-                int(self.frame_height * 0.6), 450
-            )  # Maintains 16:9 aspect ratio
-
-            # Create scaled CTkImage
-            captured_image = Image.fromarray(opencv_image)
-            photo_image = customtkinter.CTkImage(
-                light_image=captured_image,
-                dark_image=captured_image,
-                size=(display_width, display_height),
-            )
-
-            # Update the label with the new image
-            self.webcam_image_label.configure(image=photo_image)
-            self.webcam_image_label.photo_image = photo_image
-
-            # Limit the frame rate to 30 FPS
-            elapsed_time = time.time() - start_time
-            time.sleep(max(0, 1 / 30 - elapsed_time))
-
-        self.close_camera()
+    def camera_loop(self):
+        camera_loop(self)
 
     def close_camera(self):
-        """Safely close the camera and cleanup resources"""
-        # Stop camera first
-        self.camera_running = False
-        self.stop_event.set()
-
-        # Release camera resources
-        if self.cap is not None:
-            self.cap.release()
-            self.cap = None
-        cv2.destroyAllWindows()
-
-        # Ensure we're in the main thread for UI updates
-        def update_ui():
-            if hasattr(self, "webcam_image_label"):
-                try:
-                    self.webcam_image_label.destroy()
-                    self.webcam_image_label = customtkinter.CTkLabel(
-                        self.tabview.tab("Webcam Image"), text="Webcam Image"
-                    )
-                    self.webcam_image_label.grid(row=4, column=0, columnspan=4)
-                    self.open_camera_btn.configure(state="normal")
-                    self.close_camera_btn.configure(state="disabled")
-                except Exception as e:
-                    print(f"Error updating UI: {e}")
-
-        # Schedule UI update for next mainloop iteration
-        self.after(100, update_ui)
+        close_camera(self)
 
     def on_closing(self):
         if hasattr(self, "camera_running") and self.camera_running:
@@ -1575,17 +801,6 @@ class Holo(BaseGUI):
     ################################
     def getPixelPos(self, floatCoord, frameDim):
         return floatCoord * frameDim
-
-    def translate(value, leftMin, leftMax, rightMin, rightMax):
-        # Figure out how 'wide' each range is
-        leftSpan = leftMax - leftMin
-        rightSpan = rightMax - rightMin
-
-        # Convert the left range into a 0-1 range (float)
-        valueScaled = float(value - leftMin) / float(leftSpan)
-
-        # Convert the 0-1 range into a value in the right range.
-        return rightMin + (valueScaled * rightSpan)
 
     def place_image(self, file_path, x, y):
         """Place an image on the canvas centered at the click position"""
