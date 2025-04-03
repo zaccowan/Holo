@@ -1,23 +1,26 @@
 # Imports for GUI library and styling system
 import base64
+import ctypes
 import os
 from dotenv import load_dotenv
 import tkinter
 import tkinter.messagebox
 import tkinter.ttk
 import customtkinter
-from tkinter import colorchooser, filedialog
+from tkinter import filedialog
 from PIL import ImageGrab, Image, ImageTk
-import time
 import collections
 import pywinstyles
 
-# Import TextEntryWindow
-from GUI.TextEntry import TextEntryWindow
 from GUI.BaseGUI import BaseGUI
 
-# Import Function Modules
-from utilities import Utilities
+from functions.canvasMouseFunctions import CanvasMouseFunctions
+from functions.layerPanelFunctions import LayerPanelFunctions
+from functions.webcamFunctions import WebcamFunctions
+from functions.toolbarFunctions import ToolbarFunctions
+from functions.handTrackingCalibrationFunctions import HandTrackingCalibrationFunctions
+from functions.textFunctions import TextFunctions
+
 
 # Imports for hand tracking and mouse manipulation
 import math
@@ -26,7 +29,6 @@ import mediapipe as mp
 import cv2
 
 # General Imports
-import numpy as np
 import threading
 
 ## Import for AI Image Generation
@@ -44,58 +46,27 @@ from config import (
     MIN_BOUND_SIZE,
     DEFAULT_APPEARANCE_MODE,
     DEFAULT_COLOR_THEME,
-    TOOL_DICT,
     AI_MODELS,
     DEFAULT_AI_MODEL,
 )
 
-from functions.toolbarFunctions import choose_color, set_element_size, set_active_tool
-from functions.canvasMouseFunctions import (
-    mouse_move,
-    update_temp_bbox,
-    canvas_mouse_down,
-    canvas_mouse_release,
-)
-from functions.layerPanelFunctions import (
-    add_layer_to_panel,
-    delete_layer,
-    reposition_layers,
-    select_layer,
-    edit_layer_color,
-)
-from functions.webcamFunctions import (
-    list_available_cameras,
-    change_camera,
-    toggle_camera_flip,
-    open_camera,
-    camera_loop,
-    close_camera,
-)
+ctypes.windll.shcore.SetProcessDpiAwareness(1)
+
 
 customtkinter.set_appearance_mode(DEFAULT_APPEARANCE_MODE)
 customtkinter.set_default_color_theme(DEFAULT_COLOR_THEME)
 
 
-class Holo(BaseGUI):
-    mouse_down = False
-    hex_color = "#000000"
-    element_size = 5
-    tool_dict = TOOL_DICT
-    active_tool = "Circle Brush"
-    mouse_active_coords = {
-        "previous": None,
-        "current": None,
-    }
-
+class Holo(
+    CanvasMouseFunctions,
+    LayerPanelFunctions,
+    WebcamFunctions,
+    ToolbarFunctions,
+    TextFunctions,
+    HandTrackingCalibrationFunctions,
+    BaseGUI,
+):
     stroke_counter = 0
-
-    transform_active = False
-    transform_tags = []
-
-    active_bbox = None
-
-    mouse_down_canvas_coords = (0, 0)
-    mouse_release_canvas_coords = (0, 0)
 
     mp_hands = mp.solutions.hands
     mp_drawing = mp.solutions.drawing_utils
@@ -116,11 +87,16 @@ class Holo(BaseGUI):
     base_slow_factor = BASE_SLOW_FACTOR
     min_bound_size = MIN_BOUND_SIZE
 
-    # Separate X and Y velocity tracking
-    # (Removed duplicate definition of previous_mouse_pos)
-
     def __init__(self):
         super().__init__()
+
+        CanvasMouseFunctions.__init__(self)
+        LayerPanelFunctions.__init__(self)
+        WebcamFunctions.__init__(self)
+        TextFunctions.__init__(self)
+        ToolbarFunctions.__init__(self)
+        HandTrackingCalibrationFunctions.__init__(self)
+
         BaseGUI.__init__(self)
 
         load_dotenv()
@@ -248,9 +224,6 @@ class Holo(BaseGUI):
             self.layer_panel,
         )
         self.layer_container.grid(row=1, column=0, pady=5, padx=5, sticky="nsew")
-
-        # Dictionary to store layer buttons
-        self.layer_buttons = {}
 
         # Generated AI Image Tab
         self.tabview.tab("Generated AI Image").columnconfigure(0, weight=1)
@@ -525,9 +498,6 @@ class Holo(BaseGUI):
         self.appearance_mode_optionemenu.set("Dark")
         self.scaling_optionemenu.set("100%")
 
-        # Initialize tool-specific counters
-        self.tool_counters = {"brush": 0, "rect": 0, "fill": 0, "text": 0, "image": 0}
-
         # Load icons
         self.trash_icon = customtkinter.CTkImage(
             light_image=Image.open("./assets/images/trash-icon-black.png"),
@@ -563,75 +533,6 @@ class Holo(BaseGUI):
     def change_scaling_event(self, new_scaling: str):
         new_scaling_float = int(new_scaling.replace("%", "")) / 100
         customtkinter.set_widget_scaling(new_scaling_float)
-
-    ################################
-    # Toolbar Functions
-    ################################
-
-    def choose_color(self, event):
-        choose_color(self, event)
-
-    def set_element_size(self, event):
-        set_element_size(self, event)
-
-    def set_active_tool(self, *args):
-        set_active_tool(self, *args)
-
-    def open_text_entry_window(
-        self,
-    ):
-        if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
-            self.toplevel_window = TextEntryWindow(
-                self
-            )  # create window if its None or destroyed
-        else:
-            self.toplevel_window.focus()  # if window exists focus it
-
-    def set_canvas_text(self, entry_text):
-        self.canvas_text = entry_text
-        stroke_tag = self.get_stroke_tag("Text Tool")
-        self.canvas.create_text(
-            self.mouse_release_canvas_coords[0],
-            self.mouse_release_canvas_coords[1],
-            text=entry_text,
-            font=customtkinter.CTkFont(size=self.element_size),
-            tags=stroke_tag,
-        )
-        self.add_layer_to_panel(stroke_tag)
-
-    ################################
-    # Canvas Drawing Events
-    ################################
-
-    def mouse_move(self, event):
-        mouse_move(self, event)
-
-    def update_temp_bbox(self, event):
-        update_temp_bbox(self, event)
-
-    def canvas_mouse_down(self, event):
-        canvas_mouse_down(self, event)
-
-    def canvas_mouse_release(self, event):
-        canvas_mouse_release(self, event)
-
-    ################################
-    # Layer Window
-    ################################
-    def add_layer_to_panel(self, stroke_tag):
-        add_layer_to_panel(self, stroke_tag)
-
-    def delete_layer(self, stroke_tag):
-        delete_layer(self, stroke_tag)
-
-    def reposition_layers(self):
-        reposition_layers(self)
-
-    def select_layer(self, stroke_tag):
-        select_layer(self, stroke_tag)
-
-    def edit_layer_color(self, stroke_tag):
-        edit_layer_color(self, stroke_tag)
 
     ################################
     # Canvas Saving and AI Generation
@@ -744,28 +645,6 @@ class Holo(BaseGUI):
             )
         ).save(self.file_path)
 
-    ################################
-    # Webcam Functions
-    ################################
-
-    def list_available_cameras(self):
-        return list_available_cameras(self)
-
-    def change_camera(self, selection):
-        change_camera(self, selection)
-
-    def toggle_camera_flip(self):
-        toggle_camera_flip(self)
-
-    def open_camera(self):
-        open_camera(self)
-
-    def camera_loop(self):
-        camera_loop(self)
-
-    def close_camera(self):
-        close_camera(self)
-
     def on_closing(self):
         if hasattr(self, "camera_running") and self.camera_running:
             # Stop the camera loop
@@ -799,125 +678,6 @@ class Holo(BaseGUI):
     ################################
     # Helper functions
     ################################
-    def getPixelPos(self, floatCoord, frameDim):
-        return floatCoord * frameDim
-
-    def place_image(self, file_path, x, y):
-        """Place an image on the canvas centered at the click position"""
-        # Load and convert the image
-        image = Image.open(file_path)
-
-        # Calculate scaling to fit canvas while maintaining aspect ratio
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        img_width, img_height = image.size
-
-        # Calculate scale factor
-        width_ratio = canvas_width / img_width
-        height_ratio = canvas_height / img_height
-        scale_factor = min(width_ratio, height_ratio) * 0.8  # 80% of max size
-
-        # Scale image
-        new_width = int(img_width * scale_factor)
-        new_height = int(img_height * scale_factor)
-        image = image.resize((new_width, new_height), Image.LANCZOS)
-
-        # Convert to PhotoImage
-        photo = ImageTk.PhotoImage(image)
-
-        # Calculate centered position
-        x_centered = x - (new_width // 2)
-        y_centered = y - (new_height // 2)
-
-        # Create image on canvas
-        stroke_tag = self.get_stroke_tag(self.active_tool)
-
-        image_id = self.canvas.create_image(
-            x_centered,
-            y_centered,
-            image=photo,
-            anchor="nw",
-            tags=stroke_tag,
-        )
-
-        # Keep reference to prevent garbage collection
-        self.canvas.photo = photo
-
-        # Add to layer panel
-        self.add_layer_to_panel(stroke_tag)
-
-    def get_stroke_tag(self, tool_name):
-        """Generate a tag based on the tool and its specific counter"""
-        tool_prefix = {
-            "Circle Brush": "brush",
-            "Rectangle Tool": "rect",
-            "Fill Tool": "fill",
-            "Text Tool": "text",
-            "Image Tool": "image",
-            "Calligraphy": "calli",  # Add calligraphy prefix
-        }
-        prefix = tool_prefix.get(tool_name, "element")
-        if prefix not in self.tool_counters:
-            self.tool_counters[prefix] = 0  # Initialize counter if needed
-        self.tool_counters[prefix] += 1
-        return f"{prefix}_{self.tool_counters[prefix]}"
-
-    def set_transform_mode(self, mode):
-        """Set the current transform mode and update button appearances"""
-        self.transform_mode = mode
-
-        # Update button colors (remove rotate from buttons dictionary)
-        buttons = {"move": self.move_btn, "scale": self.scale_btn}
-
-        for btn_mode, btn in buttons.items():
-            if btn_mode == mode:
-                btn.configure(fg_color="#4477AA")
-            else:
-                btn.configure(fg_color="transparent")
-
-    def transform_element(self, event):
-        """Handle element transformation based on current mode"""
-        if not self.transform_active or not self.transform_tags:
-            return
-
-        match self.transform_mode:
-            case "move":
-                # Existing move logic
-                dx = event.x - self.mouse_down_canvas_coords[0]
-                dy = event.y - self.mouse_down_canvas_coords[1]
-                for tag in self.transform_tags:
-                    self.canvas.move(tag, dx, dy)
-                self.canvas.move("temp_bbox", dx, dy)
-
-            case "scale":
-                # Scale from center
-                for tag in self.transform_tags:
-                    bbox = self.canvas.bbox(tag)
-                    if bbox:
-                        center_x = (bbox[0] + bbox[2]) / 2
-                        center_y = (bbox[1] + bbox[3]) / 2
-
-                        # Prevent division by zero and invalid scaling
-                        try:
-                            dx = event.x - center_x
-                            dy = event.y - center_y
-                            old_dx = self.mouse_down_canvas_coords[0] - center_x
-                            old_dy = self.mouse_down_canvas_coords[1] - center_y
-
-                            # Calculate distance ratios for scaling
-                            new_dist = math.sqrt(dx * dx + dy * dy)
-                            old_dist = math.sqrt(old_dx * old_dx + old_dy * old_dy)
-
-                            if old_dist > 0:  # Prevent division by zero
-                                scale = new_dist / old_dist
-                                # Limit scale factor to reasonable range
-                                scale = max(0.1, min(scale, 10.0))
-                                self.canvas.scale(tag, center_x, center_y, scale, scale)
-                        except (ZeroDivisionError, ValueError):
-                            pass  # Skip scaling if calculations are invalid
-
-        # Update mouse position for next frame
-        self.mouse_down_canvas_coords = (event.x, event.y)
 
     def on_window_resize(self, event):
         """Handle window resize events"""
@@ -968,157 +728,6 @@ class Holo(BaseGUI):
             min_detection_confidence=self.detection_slider.get(),
             min_tracking_confidence=float(value),
         )
-
-    def auto_configure_left_bound(self):
-        """Set left bound to current palm position"""
-        if self.camera_running and hasattr(self, "hands"):
-            ret, frame = self.cap.read()
-            if ret:
-                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
-                    frame = cv2.flip(frame, 1)
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.hands.process(frame_rgb)
-
-                if results.multi_hand_landmarks:
-                    palm = results.multi_hand_landmarks[0].landmark[
-                        self.mp_hands.HandLandmark.WRIST
-                    ]
-                    x_pos = palm.x * self.frame_width
-                    self.left_bound_scroller.set(x_pos)
-
-    def auto_configure_right_bound(self):
-        """Set right bound to current palm position"""
-        if self.camera_running and hasattr(self, "hands"):
-            ret, frame = self.cap.read()
-            if ret:
-                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
-                    frame = cv2.flip(frame, 1)
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.hands.process(frame_rgb)
-
-                if results.multi_hand_landmarks:
-                    palm = results.multi_hand_landmarks[0].landmark[
-                        self.mp_hands.HandLandmark.WRIST
-                    ]
-                    x_pos = palm.x * self.frame_width
-                    self.right_bound_scroller.set(x_pos)
-
-    def auto_configure_top_bound(self):
-        """Set top bound to current palm position"""
-        if self.camera_running and hasattr(self, "hands"):
-            ret, frame = self.cap.read()
-            if ret:
-                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
-                    frame = cv2.flip(frame, 1)
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.hands.process(frame_rgb)
-
-                if results.multi_hand_landmarks:
-                    palm = results.multi_hand_landmarks[0].landmark[
-                        self.mp_hands.HandLandmark.WRIST
-                    ]
-                    y_pos = palm.y * self.frame_height
-                    self.top_bound_scroller.set(y_pos)
-
-    def auto_configure_bottom_bound(self):
-        """Set bottom bound to current palm position"""
-        if self.camera_running and hasattr(self, "hands"):
-            ret, frame = self.cap.read()
-            if ret:
-                if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
-                    frame = cv2.flip(frame, 1)
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.hands.process(frame_rgb)
-
-                if results.multi_hand_landmarks:
-                    palm = results.multi_hand_landmarks[0].landmark[
-                        self.mp_hands.HandLandmark.WRIST
-                    ]
-                    y_pos = palm.y * self.frame_height
-                    self.bottom_bound_scroller.set(y_pos)
-
-    def configure_depth(self):
-        """Configure depth calibration based on initial hand position"""
-        if not self.camera_running or not hasattr(self, "hands"):
-            return
-
-        # Get initial frame and hand position
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        if hasattr(self, "flip_camera_enabled") and self.flip_camera_enabled:
-            frame = cv2.flip(frame, 1)
-
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.hands.process(frame_rgb)
-
-        if results.multi_hand_landmarks:
-            # Get initial hand size as depth reference
-            hand_landmarks = results.multi_hand_landmarks[0]
-
-            # Calculate hand size using distance between wrist and middle finger MCP
-            wrist = hand_landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
-            middle_mcp = hand_landmarks.landmark[
-                self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP
-            ]
-
-            # Calculate initial hand size
-            initial_hand_size = math.sqrt(
-                (wrist.x - middle_mcp.x) ** 2 + (wrist.y - middle_mcp.y) ** 2
-            )
-
-            # Store initial values
-            self.depth_reference = {
-                "initial_size": initial_hand_size,
-                "initial_bounds": {
-                    "left": self.left_bound_scroller.get(),
-                    "right": self.right_bound_scroller.get(),
-                    "top": self.top_bound_scroller.get(),
-                    "bottom": self.bottom_bound_scroller.get(),
-                },
-            }
-
-            # Update depth button to show calibrated state
-            self.depth_btn.configure(text="Depth Calibrated", fg_color="green")
-
-            # Start depth tracking in camera loop
-            self.depth_tracking = True
-
-    def get_current_depth_ratio(self):
-        """Get current depth ratio from hand tracking"""
-        try:
-            if (
-                hasattr(self, "hands")
-                and self.camera_running
-                and hasattr(self, "depth_reference")
-            ):
-                ret, frame = self.cap.read()
-                if ret:
-                    if (
-                        hasattr(self, "flip_camera_enabled")
-                        and self.flip_camera_enabled
-                    ):
-                        frame = cv2.flip(frame, 1)
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    results = self.hands.process(frame_rgb)
-
-                    if results.multi_hand_landmarks:
-                        hand_landmarks = results.multi_hand_landmarks[0]
-                        wrist = hand_landmarks.landmark[
-                            self.mp_hands.HandLandmark.WRIST
-                        ]
-                        middle_mcp = hand_landmarks.landmark[
-                            self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP
-                        ]
-                        current_hand_size = math.sqrt(
-                            (wrist.x - middle_mcp.x) ** 2
-                            + (wrist.y - middle_mcp.y) ** 2
-                        )
-                        return current_hand_size / self.depth_reference["initial_size"]
-        except Exception as e:
-            print(f"Error getting depth ratio: {e}")
-        return 1.0  # Default to no scaling if something goes wrong
 
     def toggle_mouse_control(self):
         """Toggle mouse control on/off"""

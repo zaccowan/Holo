@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 import threading
 import customtkinter
 import pyaudio
@@ -81,8 +82,14 @@ class TextEntryWindow(customtkinter.CTkToplevel):
 
     def recognize_speech(self):
 
-        speech_model_path = "vosk-model-small-en-us-0.15"
-        speech_model = vosk.Model(speech_model_path)
+        model_base = Path(__file__).parent.parent / "assets/vosk-model-small-en-us-0.15"
+
+        if not model_base.exists():
+            print(f"Speech model not found at {model_base}")
+            print("Please download from https://alphacephei.com/vosk/models")
+            return
+
+        speech_model = vosk.Model(str(model_base))
         rec = vosk.KaldiRecognizer(speech_model, 16000)
 
         # Open the microphone stream

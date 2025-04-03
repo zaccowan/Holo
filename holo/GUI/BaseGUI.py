@@ -1,31 +1,20 @@
 import ctypes
 import tkinter
 import customtkinter
+from PIL import Image
+from pathlib import Path
+
 
 # Import Function Modules
-from utilities import Utilities
 
 # System Imports
 import sys
-from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 from config import (
     DEFAULT_FRAME_WIDTH,
     DEFAULT_FRAME_HEIGHT,
-    MIN_FRAME_WIDTH,
-    MIN_FRAME_HEIGHT,
-    ASPECT_RATIO,
-    VELOCITY_THRESHOLD_X,
-    VELOCITY_THRESHOLD_Y,
-    BASE_SLOW_FACTOR,
-    MIN_BOUND_SIZE,
-    DEFAULT_APPEARANCE_MODE,
-    DEFAULT_COLOR_THEME,
-    TOOL_DICT,
-    AI_MODELS,
-    DEFAULT_AI_MODEL,
 )
 
 
@@ -53,20 +42,47 @@ class BaseGUI(customtkinter.CTk):
 
         self.toplevel_window = None
 
-        self.holo_logo = tkinter.PhotoImage(
-            file=str(
-                Path(__file__).parent.parent
-                / "assets/images/holo_transparent_scaled.png"
+        try:
+            icon_path = (
+                Path(__file__).parent.parent / "assets/images/holo_transparent.ico"
             )
-        )
-        myappid = "Holo"
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-        self.wm_iconbitmap(
-            str(
-                Path(__file__).parent.parent
-                / "assets/images/holo_transparent_scaled.png"
-            )
-        )
+            if not icon_path.exists():
+                # Convert PNG to multi-size ICO
+                png_path = (
+                    Path(__file__).parent.parent / "assets/images/holo_transparent.png"
+                )
+                if png_path.exists():
+                    with Image.open(png_path) as img:
+                        # Convert to RGBA if needed
+                        if img.mode != "RGBA":
+                            img = img.convert("RGBA")
+
+                        # Create multiple sizes for better quality
+                        sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128)]
+                        icons = []
+
+                        for size in sizes:
+                            resized_img = img.resize(size, Image.Resampling.LANCZOS)
+                            icons.append(resized_img)
+
+                        # Save as multi-size ICO
+                        icons[0].save(
+                            icon_path,
+                            format="ICO",
+                            sizes=sizes,
+                            append_images=icons[1:],
+                        )
+
+            # Set window icon - use both methods for compatibility
+            self.iconbitmap(default=str(icon_path))
+            self.wm_iconbitmap(default=str(icon_path))
+
+            # Set taskbar icon
+            myappid = "Holo.Canvas.1.0"
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+        except Exception as e:
+            print(f"Error loading application icon: {e}")
 
         # configure grid layout (4x4)
         self.grid_columnconfigure(1, weight=1)

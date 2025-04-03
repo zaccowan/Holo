@@ -1,104 +1,223 @@
+import math
 from tkinter import colorchooser
 import customtkinter
+from PIL import Image, ImageTk
 
+from config import (
+    TOOL_DICT,
+)
 
 ################################
 # Toolbar Functions
 ################################
 
 
-def choose_color(self_instance, event):
-    self_instance.color_code = colorchooser.askcolor(title="Choose color")
-    if self_instance.color_code:
-        self_instance.hex_color = self_instance.color_code[1]
-        self_instance.color_label.configure(
-            text=f"Element Color: {self_instance.hex_color}",
-            fg_color=self_instance.hex_color,
+class ToolbarFunctions:
+    def __init__(self):
+        self.hex_color = "#000000"
+        self.element_size = 5
+        self.tool_dict = TOOL_DICT
+        self.active_tool = "Circle Brush"
+
+    def choose_color(self, event):
+        self.color_code = colorchooser.askcolor(title="Choose color")
+        if self.color_code:
+            self.hex_color = self.color_code[1]
+            self.color_label.configure(
+                text=f"Element Color: {self.hex_color}",
+                fg_color=self.hex_color,
+            )
+
+    def set_element_size(self, event):
+        self.element_size = int(self.element_size_slider.get())
+        self.element_size_label.configure(text=f"Element Size: {self.element_size}")
+
+    def set_active_tool(self, *args):
+        self.active_tool = self.tool_dict.get(self.radio_tool_var.get())
+        match self.active_tool:
+            case "Circle Brush":
+                self.canvas.configure(cursor="circle")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
+            case "Rectangle Tool":
+                self.canvas.configure(cursor="tcross")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
+            case "Fill Tool":
+                self.canvas.configure(cursor="spraycan")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
+            case "Text Tool":
+                self.canvas.configure(cursor="xterm")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
+            case "Transform Tool":
+                self.canvas.configure(cursor="fleur")
+                # Show transform controls
+                self.transform_controls.grid(
+                    row=0, column=0, columnspan=3, sticky="ew", pady=(0, 5)
+                )
+                # Initialize transform state
+                self.transform_mode = "move"
+                self.move_btn.configure(fg_color="#4477AA")
+                self.scale_btn.configure(fg_color="transparent")
+
+            case "Delete Tool":
+                self.canvas.configure(cursor="X_cursor")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
+            case "Image Tool":
+                self.canvas.configure(cursor="plus")
+                self.transform_controls.grid_remove()  # Hide controls
+                self.transform_active = False
+                self.transform_tags.clear()
+
+    # def open_text_entry_window(
+    #     self,
+    # ):
+    #     from GUI.TextEntry import TextEntryWindow
+
+    #     if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
+    #         self.toplevel_window = TextEntryWindow(
+    #             self
+    #         )  # create window if its None or destroyed
+    #     else:
+    #         self.toplevel_window.focus()  # if window exists focus it
+
+    # def set_canvas_text(self, entry_text):
+    #     self.canvas_text = entry_text
+    #     stroke_tag = self.get_stroke_tag("Text Tool")
+    #     self.canvas.create_text(
+    #         self.mouse_release_canvas_coords[0],
+    #         self.mouse_release_canvas_coords[1],
+    #         text=entry_text,
+    #         font=customtkinter.CTkFont(size=self.element_size),
+    #         tags=stroke_tag,
+    #     )
+    #     self.add_layer_to_panel(stroke_tag)
+
+    def place_image(self, file_path, x, y):
+        """Place an image on the canvas centered at the click position"""
+        # Load and convert the image
+        image = Image.open(file_path)
+
+        # Calculate scaling to fit canvas while maintaining aspect ratio
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        img_width, img_height = image.size
+
+        # Calculate scale factor
+        width_ratio = canvas_width / img_width
+        height_ratio = canvas_height / img_height
+        scale_factor = min(width_ratio, height_ratio) * 0.8  # 80% of max size
+
+        # Scale image
+        new_width = int(img_width * scale_factor)
+        new_height = int(img_height * scale_factor)
+        image = image.resize((new_width, new_height), Image.LANCZOS)
+
+        # Convert to PhotoImage
+        photo = ImageTk.PhotoImage(image)
+
+        # Calculate centered position
+        x_centered = x - (new_width // 2)
+        y_centered = y - (new_height // 2)
+
+        # Create image on canvas
+        stroke_tag = self.get_stroke_tag(self.active_tool)
+
+        image_id = self.canvas.create_image(
+            x_centered,
+            y_centered,
+            image=photo,
+            anchor="nw",
+            tags=stroke_tag,
         )
 
+        # Keep reference to prevent garbage collection
+        self.canvas.photo = photo
 
-def set_element_size(self_instance, event):
-    self_instance.element_size = int(self_instance.element_size_slider.get())
-    self_instance.element_size_label.configure(
-        text=f"Element Size: {self_instance.element_size}"
-    )
+        # Add to layer panel
+        self.add_layer_to_panel(stroke_tag)
 
+    def get_stroke_tag(self, tool_name):
+        tool_prefix = {
+            "Circle Brush": "brush",
+            "Rectangle Tool": "rect",
+            "Fill Tool": "fill",
+            "Text Tool": "text",
+            "Image Tool": "image",
+            "Calligraphy": "calli",  # Add calligraphy prefix
+        }
+        prefix = tool_prefix.get(tool_name, "element")
+        if prefix not in self.tool_counters:
+            self.tool_counters[prefix] = 0  # Initialize counter if needed
+        self.tool_counters[prefix] += 1
+        return f"{prefix}_{self.tool_counters[prefix]}"
 
-def set_active_tool(self_instance, *args):
-    self_instance.active_tool = self_instance.tool_dict.get(
-        self_instance.radio_tool_var.get()
-    )
-    match self_instance.active_tool:
-        case "Circle Brush":
-            self_instance.canvas.configure(cursor="circle")
-            self_instance.transform_controls.grid_remove()  # Hide controls
-            self_instance.transform_active = False
-            self_instance.transform_tags.clear()
+    def set_transform_mode(self, mode):
+        """Set the current transform mode and update button appearances"""
+        self.transform_mode = mode
 
-        case "Rectangle Tool":
-            self_instance.canvas.configure(cursor="tcross")
-            self_instance.transform_controls.grid_remove()  # Hide controls
-            self_instance.transform_active = False
-            self_instance.transform_tags.clear()
+        # Update button colors (remove rotate from buttons dictionary)
+        buttons = {"move": self.move_btn, "scale": self.scale_btn}
 
-        case "Fill Tool":
-            self_instance.canvas.configure(cursor="spraycan")
-            self_instance.transform_controls.grid_remove()  # Hide controls
-            self_instance.transform_active = False
-            self_instance.transform_tags.clear()
+        for btn_mode, btn in buttons.items():
+            if btn_mode == mode:
+                btn.configure(fg_color="#4477AA")
+            else:
+                btn.configure(fg_color="transparent")
 
-        case "Text Tool":
-            self_instance.canvas.configure(cursor="xterm")
-            self_instance.transform_controls.grid_remove()  # Hide controls
-            self_instance.transform_active = False
-            self_instance.transform_tags.clear()
+    def transform_element(self, event):
+        """Handle element transformation based on current mode"""
+        if not self.transform_active or not self.transform_tags:
+            return
 
-        case "Transform Tool":
-            self_instance.canvas.configure(cursor="fleur")
-            # Show transform controls
-            self_instance.transform_controls.grid(
-                row=0, column=0, columnspan=3, sticky="ew", pady=(0, 5)
-            )
-            # Initialize transform state
-            self_instance.transform_mode = "move"
-            self_instance.move_btn.configure(fg_color="#4477AA")
-            self_instance.scale_btn.configure(fg_color="transparent")
+        match self.transform_mode:
+            case "move":
+                # Existing move logic
+                dx = event.x - self.mouse_down_canvas_coords[0]
+                dy = event.y - self.mouse_down_canvas_coords[1]
+                for tag in self.transform_tags:
+                    self.canvas.move(tag, dx, dy)
+                self.canvas.move("temp_bbox", dx, dy)
 
-        case "Delete Tool":
-            self_instance.canvas.configure(cursor="X_cursor")
-            self_instance.transform_controls.grid_remove()  # Hide controls
-            self_instance.transform_active = False
-            self_instance.transform_tags.clear()
+            case "scale":
+                # Scale from center
+                for tag in self.transform_tags:
+                    bbox = self.canvas.bbox(tag)
+                    if bbox:
+                        center_x = (bbox[0] + bbox[2]) / 2
+                        center_y = (bbox[1] + bbox[3]) / 2
 
-        case "Image Tool":
-            self_instance.canvas.configure(cursor="plus")
-            self_instance.transform_controls.grid_remove()  # Hide controls
-            self_instance.transform_active = False
-            self_instance.transform_tags.clear()
+                        # Prevent division by zero and invalid scaling
+                        try:
+                            dx = event.x - center_x
+                            dy = event.y - center_y
+                            old_dx = self.mouse_down_canvas_coords[0] - center_x
+                            old_dy = self.mouse_down_canvas_coords[1] - center_y
 
+                            # Calculate distance ratios for scaling
+                            new_dist = math.sqrt(dx * dx + dy * dy)
+                            old_dist = math.sqrt(old_dx * old_dx + old_dy * old_dy)
 
-def open_text_entry_window(
-    self_instance,
-):
-    if (
-        self_instance.toplevel_window is None
-        or not self_instance.toplevel_window.winfo_exists()
-    ):
-        self_instance.toplevel_window = TextEntryWindow(
-            self_instance
-        )  # create window if its None or destroyed
-    else:
-        self_instance.toplevel_window.focus()  # if window exists focus it
+                            if old_dist > 0:  # Prevent division by zero
+                                scale = new_dist / old_dist
+                                # Limit scale factor to reasonable range
+                                scale = max(0.1, min(scale, 10.0))
+                                self.canvas.scale(tag, center_x, center_y, scale, scale)
+                        except (ZeroDivisionError, ValueError):
+                            pass  # Skip scaling if calculations are invalid
 
-
-def set_canvas_text(self_instance, entry_text):
-    self_instance.canvas_text = entry_text
-    stroke_tag = self_instance.get_stroke_tag("Text Tool")
-    self_instance.canvas.create_text(
-        self_instance.mouse_release_canvas_coords[0],
-        self_instance.mouse_release_canvas_coords[1],
-        text=entry_text,
-        font=customtkinter.CTkFont(size=self_instance.element_size),
-        tags=stroke_tag,
-    )
-    self_instance.add_layer_to_panel(stroke_tag)
+        # Update mouse position for next frame
+        self.mouse_down_canvas_coords = (event.x, event.y)
