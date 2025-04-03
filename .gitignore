@@ -3,8 +3,8 @@ recognized_text.txt
 holo.cmd
 holo.exe
 nuitka-crash-report.xml
-*.png
-*.jpg
+/*.png
+/*.jpg
 .env
 
 *.pdb
