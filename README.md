@@ -1,4 +1,4 @@
-<img src="./images/holo_logo.png" alt="Holo Logo - Generated with Dalle" width="200"/>
+<img src="./holo/assets/images/holo_logo.png" alt="Holo Logo - Generated with Dalle" width="200"/>
 
 # What is Holo?
 
