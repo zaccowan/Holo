@@ -254,6 +254,20 @@ class Holo(
         )
         self.gen_ai_image_label.grid(row=1, column=0)
 
+        # Add this where your gen_ai_image_label is created in __init__
+        self.copy_to_canvas_btn = customtkinter.CTkButton(
+            master=self.tabview.tab("Generated AI Image"),
+            fg_color="transparent",
+            border_width=2,
+            text="Copy to Canvas",
+            text_color=("gray10", "#DCE4EE"),
+            command=self.copy_ai_image_to_canvas,
+            state="disabled",  # Initially disabled until an image is generated
+        )
+        self.copy_to_canvas_btn.grid(
+            row=2, column=0, padx=(20, 20), pady=(5, 20), sticky="ew"
+        )
+
         # Webcam Tab
         self.tabview.tab("Webcam Image").columnconfigure((0, 1, 2, 3), weight=1)
         self.tabview.tab("Webcam Image").rowconfigure(4, weight=1)
@@ -582,19 +596,6 @@ class Holo(
                 )
             elif self.ai_model.get() == "t2i-adapter-sdxl-sketch":
                 output = replicate.run(
-                    "black-forest-labs/flux-schnell",
-                    input={
-                        "prompt": prompt,
-                        "megapixels": "1",
-                        "num_outputs": 1,
-                        "aspect_ratio": "16:9",
-                        "output_format": "png",
-                        "output_quality": 80,
-                        "num_inference_steps": 4,
-                    },
-                )
-            else:  # T2I Adapter SDXL Sketch
-                output = replicate.run(
                     "adirik/t2i-adapter-sdxl-sketch:3a14a915b013decb6ab672115c8bced7c088df86c2ddd0a89433717b9ec7d927",
                     input={
                         "image": image,
@@ -608,23 +609,65 @@ class Holo(
                         "adapter_conditioning_factor": 1,
                     },
                 )
+            else:  # T2I Adapter SDXL Sketch
+                output = replicate.run(
+                    "black-forest-labs/flux-schnell",
+                    input={
+                        "prompt": prompt,
+                        "megapixels": "1",
+                        "num_outputs": 1,
+                        "aspect_ratio": "16:9",
+                        "output_format": "png",
+                        "output_quality": 80,
+                        "num_inference_steps": 4,
+                    },
+                )
 
             # Rest of the function remains the same
             for index, item in enumerate(output):
                 with open(f"output_{index}.png", "wb") as file:
                     file.write(item.read())
 
-            ai_gen_image = cv2.imread("output_0.png")
-            ai_gen_image = cv2.cvtColor(ai_gen_image, cv2.COLOR_BGR2RGB)
-            ai_gen_image = Image.fromarray(ai_gen_image)
-            ai_photo_image = ImageTk.PhotoImage(ai_gen_image)
+            if self.ai_model.get() == "t2i-adapter-sdxl-sketch":
+                self.ai_gen_image = cv2.imread("output_1.png")
+            else:
+                self.ai_gen_image = cv2.imread("output_0.png")
+
+            self.ai_gen_image = cv2.cvtColor(self.ai_gen_image, cv2.COLOR_BGR2RGB)
+            self.ai_gen_image = Image.fromarray(self.ai_gen_image)
+            ai_photo_image = ImageTk.PhotoImage(self.ai_gen_image)
             self.gen_ai_image_label.configure(text="")
             self.gen_ai_image_label.ai_photo_image = ai_photo_image
             self.gen_ai_image_label.configure(image=ai_photo_image)
 
+            # Store the path to the generated image
+            self.ai_generated_image_path = "output_0.png"
+
+            # Enable the copy to canvas button
+            self.copy_to_canvas_btn.configure(state="normal")
+
         replicate_thread = threading.Thread(target=run_replicate)
         replicate_thread.start()
-        # pass
+
+    def copy_ai_image_to_canvas(self):
+        """Copy the AI-generated image to the canvas and switch to Canvas tab"""
+        # Switch to Canvas tab first
+        self.tabview.set("Canvas")
+
+        # Proceed with copying the image
+        if hasattr(self, "ai_generated_image_path") and os.path.exists(
+            self.ai_generated_image_path
+        ):
+            # Get current canvas dimensions
+            canvas_width = self.canvas.winfo_width()
+            canvas_height = self.canvas.winfo_height()
+
+            # Calculate center position of canvas
+            x_center = canvas_width / 2
+            y_center = canvas_height / 2
+
+            # Place image at the center of canvas
+            self.place_image(self.ai_generated_image_path, x_center, y_center)
 
     def canvas_save_png(self):
         self.canvas.delete("temp_bbox")

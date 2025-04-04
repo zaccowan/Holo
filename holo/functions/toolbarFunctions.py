@@ -82,30 +82,6 @@ class ToolbarFunctions:
                 self.transform_active = False
                 self.transform_tags.clear()
 
-    # def open_text_entry_window(
-    #     self,
-    # ):
-    #     from GUI.TextEntry import TextEntryWindow
-
-    #     if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
-    #         self.toplevel_window = TextEntryWindow(
-    #             self
-    #         )  # create window if its None or destroyed
-    #     else:
-    #         self.toplevel_window.focus()  # if window exists focus it
-
-    # def set_canvas_text(self, entry_text):
-    #     self.canvas_text = entry_text
-    #     stroke_tag = self.get_stroke_tag("Text Tool")
-    #     self.canvas.create_text(
-    #         self.mouse_release_canvas_coords[0],
-    #         self.mouse_release_canvas_coords[1],
-    #         text=entry_text,
-    #         font=customtkinter.CTkFont(size=self.element_size),
-    #         tags=stroke_tag,
-    #     )
-    #     self.add_layer_to_panel(stroke_tag)
-
     def place_image(self, file_path, x, y):
         """Place an image on the canvas centered at the click position"""
         # Load and convert the image
@@ -124,10 +100,13 @@ class ToolbarFunctions:
         # Scale image
         new_width = int(img_width * scale_factor)
         new_height = int(img_height * scale_factor)
-        image = image.resize((new_width, new_height), Image.LANCZOS)
+        resized_image = image.resize((new_width, new_height), Image.LANCZOS)
 
         # Convert to PhotoImage
-        photo = ImageTk.PhotoImage(image)
+        photo = ImageTk.PhotoImage(resized_image)
+
+        # Store the original image for future scaling operations
+        photo._photo_original = image
 
         # Calculate centered position
         x_centered = x - (new_width // 2)
@@ -144,8 +123,12 @@ class ToolbarFunctions:
             tags=stroke_tag,
         )
 
-        # Keep reference to prevent garbage collection
-        self.canvas.photo = photo
+        # Initialize photo_references dictionary if it doesn't exist
+        if not hasattr(self.canvas, "photo_references"):
+            self.canvas.photo_references = {}
+
+        # Store reference to prevent garbage collection using the stroke_tag as key
+        self.canvas.photo_references[stroke_tag] = photo
 
         # Add to layer panel
         self.add_layer_to_panel(stroke_tag)
@@ -215,7 +198,64 @@ class ToolbarFunctions:
                                 scale = new_dist / old_dist
                                 # Limit scale factor to reasonable range
                                 scale = max(0.1, min(scale, 10.0))
-                                self.canvas.scale(tag, center_x, center_y, scale, scale)
+
+                                # Check if this is an image tag
+                                if (
+                                    tag.startswith("image_")
+                                    and hasattr(self.canvas, "photo_references")
+                                    and tag in self.canvas.photo_references
+                                ):
+                                    # Get the item ID for this tag
+                                    items = self.canvas.find_withtag(tag)
+                                    if items:
+                                        # Get current position
+                                        current_coords = self.canvas.coords(items[0])
+
+                                        # Get the original image reference
+                                        photo_ref = self.canvas.photo_references[tag]
+                                        if hasattr(photo_ref, "_photo_original"):
+                                            # Get original PIL image if stored
+                                            original_img = photo_ref._photo_original
+                                        else:
+                                            # If not available, we can't scale it properly
+                                            self.canvas.scale(
+                                                tag, center_x, center_y, scale, scale
+                                            )
+                                            continue
+
+                                        # Calculate new size
+                                        current_width = bbox[2] - bbox[0]
+                                        current_height = bbox[3] - bbox[1]
+                                        new_width = int(current_width * scale)
+                                        new_height = int(current_height * scale)
+
+                                        # Resize the image
+                                        resized_img = original_img.resize(
+                                            (new_width, new_height), Image.LANCZOS
+                                        )
+                                        new_photo = ImageTk.PhotoImage(resized_img)
+
+                                        # Store reference to prevent garbage collection
+                                        self.canvas.photo_references[tag] = new_photo
+                                        # Store original for future scaling
+                                        new_photo._photo_original = original_img
+
+                                        # Update image on canvas (delete and recreate)
+                                        self.canvas.delete(items[0])
+                                        new_x = center_x - (new_width / 2)
+                                        new_y = center_y - (new_height / 2)
+                                        self.canvas.create_image(
+                                            new_x,
+                                            new_y,
+                                            image=new_photo,
+                                            anchor="nw",
+                                            tags=tag,
+                                        )
+                                else:
+                                    # For non-image elements, use regular scaling
+                                    self.canvas.scale(
+                                        tag, center_x, center_y, scale, scale
+                                    )
                         except (ZeroDivisionError, ValueError):
                             pass  # Skip scaling if calculations are invalid
 
