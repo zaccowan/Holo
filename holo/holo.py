@@ -1,49 +1,29 @@
 # Imports for GUI library and styling system
-import base64
 import ctypes
-import os
 from dotenv import load_dotenv
 import tkinter
-import tkinter.messagebox
-import tkinter.ttk
 import customtkinter
-from tkinter import filedialog
-from PIL import ImageGrab, Image, ImageTk
-import collections
-import pywinstyles
+from PIL import Image
 
 from GUI.BaseGUI import BaseGUI
-
 from functions.canvasMouseFunctions import CanvasMouseFunctions
 from functions.layerPanelFunctions import LayerPanelFunctions
 from functions.webcamFunctions import WebcamFunctions
 from functions.toolbarFunctions import ToolbarFunctions
 from functions.handTrackingCalibrationFunctions import HandTrackingCalibrationFunctions
 from functions.textFunctions import TextFunctions
-
+from functions.canvasSavingFunctions import CanvasSavingFunctions
+from functions.windowHelperFunctions import WindowHelperFunctions
 
 # Imports for hand tracking and mouse manipulation
-import math
 import pyautogui
-import mediapipe as mp
-import cv2
 
 # General Imports
 import threading
 
-## Import for AI Image Generation
-import replicate
-
 from config import (
     DEFAULT_FRAME_WIDTH,
     DEFAULT_FRAME_HEIGHT,
-    MIN_FRAME_WIDTH,
-    MIN_FRAME_HEIGHT,
-    ASPECT_RATIO,
-    VELOCITY_THRESHOLD_X,
-    VELOCITY_THRESHOLD_Y,
-    BASE_SLOW_FACTOR,
-    MIN_BOUND_SIZE,
     DEFAULT_APPEARANCE_MODE,
     DEFAULT_COLOR_THEME,
     AI_MODELS,
@@ -51,8 +31,6 @@ from config import (
 )
 
 ctypes.windll.shcore.SetProcessDpiAwareness(1)
-
-
 customtkinter.set_appearance_mode(DEFAULT_APPEARANCE_MODE)
 customtkinter.set_default_color_theme(DEFAULT_COLOR_THEME)
 
@@ -65,27 +43,15 @@ class Holo(
     TextFunctions,
     HandTrackingCalibrationFunctions,
     BaseGUI,
+    CanvasSavingFunctions,
+    WindowHelperFunctions,
 ):
-    stroke_counter = 0
-
-    mp_hands = mp.solutions.hands
-    mp_drawing = mp.solutions.drawing_utils
-    mp_drawing_styles = mp.solutions.drawing_styles
 
     canvas_text = None
 
     screen_width, screen_height = pyautogui.size()
     pyautogui.FAILSAFE = False
     pyautogui.PAUSE = 0
-
-    current_click = True
-
-    # Mouse velocity tracking
-    previous_mouse_pos = (0, 0)
-    velocity_threshold_x = VELOCITY_THRESHOLD_X
-    velocity_threshold_y = VELOCITY_THRESHOLD_Y
-    base_slow_factor = BASE_SLOW_FACTOR
-    min_bound_size = MIN_BOUND_SIZE
 
     def __init__(self):
         super().__init__()
@@ -115,11 +81,6 @@ class Holo(
             min_detection_confidence=0.5,  # Lower this from 0.7
             min_tracking_confidence=0.5,  # Lower this from 0.7
         )
-
-        # Smoothing parameters
-        self.mouse_smoothing = 5
-        self.mouse_x_positions = collections.deque(maxlen=self.mouse_smoothing)
-        self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
 
         # Canvas Frame with dynamic sizing
         self.canvas_frame = customtkinter.CTkFrame(
@@ -523,265 +484,6 @@ class Holo(
         )
 
         self.apply_win_style("acrylic")
-
-    ########################################################################################################################################################
-    ########################################################################################################################################################
-    # End of init ##########################################################################################################################################
-    ########################################################################################################################################################
-    ########################################################################################################################################################
-
-    def apply_win_style(self, style_name):
-        pywinstyles.apply_style(self, style_name)
-        pywinstyles.set_opacity(self.canvas, 1)
-        pywinstyles.set_opacity(self.webcam_image_label, 1)
-        pywinstyles.set_opacity(self.gen_ai_image_label, 1)
-
-    def change_appearance_mode_event(self, new_appearance_mode: str):
-        customtkinter.set_appearance_mode(new_appearance_mode)
-        if new_appearance_mode == "Light":
-            self.apply_win_style("mica")
-        elif new_appearance_mode == "Dark":
-            self.apply_win_style("acrylic")
-            pywinstyles.set_opacity(self, 1)
-
-    def change_scaling_event(self, new_scaling: str):
-        new_scaling_float = int(new_scaling.replace("%", "")) / 100
-        customtkinter.set_widget_scaling(new_scaling_float)
-
-    ################################
-    # Canvas Saving and AI Generation
-    ################################
-    def generate_ai_image(self):
-        self.canvas_save_png()
-        input_image_path = self.file_path
-        prompt = self.prompt_entry.get()
-        cv2.imshow("Input Sketch", cv2.imread(input_image_path))
-        print(prompt)
-
-        def run_replicate():
-            with open(input_image_path, "rb") as file:
-                data = base64.b64encode(file.read()).decode("utf-8")
-                image = f"data:application/octet-stream;base64,{data}"
-
-            replicate.Client(api_token=os.environ["REPLICATE_API_TOKEN"])
-
-            if self.ai_model.get() == "Sketch to Image":
-                output = replicate.run(
-                    "qr2ai/outline:6f713aeb58eb5034ad353de02d7dd56c9efa79f2214e6b89a790dad8ca67ef49",
-                    input={
-                        "seed": 0,
-                        "image": image,
-                        "width": 1280,
-                        "height": 720,
-                        "prompt": prompt,
-                        "sampler": "Euler a",
-                        "blur_size": 3,
-                        "use_canny": False,
-                        "lora_input": "",
-                        "lora_scale": "",
-                        "kernel_size": 3,
-                        "num_outputs": 1,
-                        "sketch_type": "HedPidNet",
-                        "suffix_prompt": "Imagine the harmonious blend of graceful forms and cosmic elegance, where each curve and line tells a story amidst the celestial backdrop, captured in a luxurious interplay of dark and light hues.",
-                        "guidance_scale": 7.5,
-                        "weight_primary": 0.7,
-                        "generate_square": False,
-                        "negative_prompt": "worst quality, low quality, low resolution, blurry, ugly, disfigured, uncrafted, filled ring, packed ring, cross, star, distorted, stagnant, watermark",
-                        "weight_secondary": 0.6,
-                        "erosion_iterations": 2,
-                        "dilation_iterations": 1,
-                        "num_inference_steps": 35,
-                        "adapter_conditioning_scale": 0.9,
-                    },
-                )
-            elif self.ai_model.get() == "t2i-adapter-sdxl-sketch":
-                output = replicate.run(
-                    "adirik/t2i-adapter-sdxl-sketch:3a14a915b013decb6ab672115c8bced7c088df86c2ddd0a89433717b9ec7d927",
-                    input={
-                        "image": image,
-                        "prompt": prompt,
-                        "scheduler": "K_EULER_ANCESTRAL",
-                        "num_samples": 1,
-                        "guidance_scale": 7.5,
-                        "negative_prompt": "extra digit, fewer digits, cropped, worst quality, low quality, glitch, deformed, mutated, ugly, disfigured",
-                        "num_inference_steps": 30,
-                        "adapter_conditioning_scale": 0.9,
-                        "adapter_conditioning_factor": 1,
-                    },
-                )
-            else:  # T2I Adapter SDXL Sketch
-                output = replicate.run(
-                    "black-forest-labs/flux-schnell",
-                    input={
-                        "prompt": prompt,
-                        "megapixels": "1",
-                        "num_outputs": 1,
-                        "aspect_ratio": "16:9",
-                        "output_format": "png",
-                        "output_quality": 80,
-                        "num_inference_steps": 4,
-                    },
-                )
-
-            # Rest of the function remains the same
-            for index, item in enumerate(output):
-                with open(f"output_{index}.png", "wb") as file:
-                    file.write(item.read())
-
-            if self.ai_model.get() == "t2i-adapter-sdxl-sketch":
-                self.ai_gen_image = cv2.imread("output_1.png")
-            else:
-                self.ai_gen_image = cv2.imread("output_0.png")
-
-            self.ai_gen_image = cv2.cvtColor(self.ai_gen_image, cv2.COLOR_BGR2RGB)
-            self.ai_gen_image = Image.fromarray(self.ai_gen_image)
-            ai_photo_image = ImageTk.PhotoImage(self.ai_gen_image)
-            self.gen_ai_image_label.configure(text="")
-            self.gen_ai_image_label.ai_photo_image = ai_photo_image
-            self.gen_ai_image_label.configure(image=ai_photo_image)
-
-            # Store the path to the generated image
-            self.ai_generated_image_path = "output_0.png"
-
-            # Enable the copy to canvas button
-            self.copy_to_canvas_btn.configure(state="normal")
-
-        replicate_thread = threading.Thread(target=run_replicate)
-        replicate_thread.start()
-
-    def copy_ai_image_to_canvas(self):
-        """Copy the AI-generated image to the canvas and switch to Canvas tab"""
-        # Switch to Canvas tab first
-        self.tabview.set("Canvas")
-
-        # Proceed with copying the image
-        if hasattr(self, "ai_generated_image_path") and os.path.exists(
-            self.ai_generated_image_path
-        ):
-            # Get current canvas dimensions
-            canvas_width = self.canvas.winfo_width()
-            canvas_height = self.canvas.winfo_height()
-
-            # Calculate center position of canvas
-            x_center = canvas_width / 2
-            y_center = canvas_height / 2
-
-            # Place image at the center of canvas
-            self.place_image(self.ai_generated_image_path, x_center, y_center)
-
-    def canvas_save_png(self):
-        self.canvas.delete("temp_bbox")
-        self.canvas.delete("temp_rect")
-        self.file_path = filedialog.asksaveasfilename(
-            defaultextension="*.png",
-            filetypes=(
-                ("PNG Files", "*.png"),
-                ("JPG Files", "*.jpg"),
-            ),
-        )
-        ImageGrab.grab(
-            bbox=(
-                self.canvas.winfo_rootx(),
-                self.canvas.winfo_rooty(),
-                self.canvas.winfo_rootx() + self.canvas.winfo_width() - 4,
-                self.canvas.winfo_rooty() + self.canvas.winfo_height() - 4,
-            )
-        ).save(self.file_path)
-
-    def on_closing(self):
-        if hasattr(self, "camera_running") and self.camera_running:
-            # Stop the camera loop
-            self.camera_running = False
-            self.stop_event.set()
-
-            # Wait for camera thread to finish
-            if self.camera_thread and self.camera_thread.is_alive():
-                self.camera_thread.join(timeout=1.0)
-
-            # Release camera resources
-            if self.cap and self.cap.isOpened():
-                self.cap.release()
-                self.cap = None
-
-            # Cleanup OpenCV windows
-            cv2.destroyAllWindows()
-
-            # Reset camera-related variables
-            self.camera_thread = None
-            self.webcam_image_label.configure(text="Camera Off")
-
-        # Clean up MediaPipe resources
-        if hasattr(self, "hands"):
-            self.hands.close()
-
-        # Destroy the window
-        self.quit()
-        self.destroy()
-
-    ################################
-    # Helper functions
-    ################################
-
-    def on_window_resize(self, event):
-        """Handle window resize events"""
-        if event.widget == self:
-            # Get the available space
-            frame_width = self.canvas_frame.winfo_width()
-            frame_height = self.canvas_frame.winfo_height()
-
-            # Maintain aspect ratio
-            if frame_width / frame_height > ASPECT_RATIO:
-                new_height = frame_height
-                new_width = int(new_height * ASPECT_RATIO)
-            else:
-                new_width = frame_width
-                new_height = int(new_width / ASPECT_RATIO)
-
-            # Ensure minimum dimensions
-            new_width = max(new_width, MIN_FRAME_WIDTH)
-            new_height = max(new_height, MIN_FRAME_HEIGHT)
-
-            # Configure canvas size
-            self.canvas.configure(width=new_width, height=new_height)
-
-    def update_smoothing(self, value):
-        """Update smoothing window size"""
-        self.mouse_smoothing = int(value)
-        self.mouse_x_positions = collections.deque(maxlen=self.mouse_smoothing)
-        self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
-
-    def update_detection_confidence(self, value):
-        """Update hand detection confidence threshold"""
-        if hasattr(self, "hands"):
-            self.hands.close()
-        self.hands = self.mp_hands.Hands(
-            static_image_mode=False,
-            max_num_hands=1,
-            min_detection_confidence=float(value),
-            min_tracking_confidence=self.tracking_slider.get(),
-        )
-
-    def update_tracking_confidence(self, value):
-        """Update hand tracking confidence threshold"""
-        if hasattr(self, "hands"):
-            self.hands.close()
-        self.hands = self.mp_hands.Hands(
-            static_image_mode=False,
-            max_num_hands=1,
-            min_detection_confidence=self.detection_slider.get(),
-            min_tracking_confidence=float(value),
-        )
-
-    def toggle_mouse_control(self):
-        """Toggle mouse control on/off"""
-        self.mouse_control_enabled = self.mouse_control.get()
-
-    def toggle_fullscreen(self, event=None):
-        """Toggle fullscreen mode"""
-        if self.state() == "zoomed":
-            self.state("normal")
-        else:
-            self.state("zoomed")
 
 
 if __name__ == "__main__":

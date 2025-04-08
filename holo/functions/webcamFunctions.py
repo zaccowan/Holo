@@ -1,3 +1,4 @@
+import collections
 import threading
 import cv2
 import time
@@ -6,6 +7,14 @@ import numpy as np
 from PIL import Image
 import customtkinter
 import pyautogui
+import mediapipe as mp
+
+from config import (
+    BASE_SLOW_FACTOR,
+    MIN_BOUND_SIZE,
+    VELOCITY_THRESHOLD_X,
+    VELOCITY_THRESHOLD_Y,
+)
 
 ################################
 # Webcam Functions
@@ -14,7 +23,17 @@ import pyautogui
 
 class WebcamFunctions:
     def __init__(self):
-        pass
+        self.mp_hands = mp.solutions.hands
+        self.mp_drawing = mp.solutions.drawing_utils
+        self.mp_drawing_styles = mp.solutions.drawing_styles
+        self.current_click = True
+
+        self.previous_mouse_pos = (0, 0)
+
+        # Smoothing parameters
+        self.mouse_smoothing = 5
+        self.mouse_x_positions = collections.deque(maxlen=self.mouse_smoothing)
+        self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
 
     def list_available_cameras(self):
         available_ports = []
@@ -166,8 +185,8 @@ class WebcamFunctions:
                 bound_height = bottom_bound - top_bound
 
                 # Calculate scaling factors based on bound sizes
-                width_scale = min(1.0, bound_width / self.min_bound_size)
-                height_scale = min(1.0, bound_height / self.min_bound_size)
+                width_scale = min(1.0, bound_width / MIN_BOUND_SIZE)
+                height_scale = min(1.0, bound_height / MIN_BOUND_SIZE)
 
                 # Check if mouse is over canvas
                 canvas_rect = (
@@ -186,16 +205,14 @@ class WebcamFunctions:
                 canvas_slowdown = (
                     3.0 if is_over_canvas and finger_distance < 0.05 else 1.0
                 )
-                x_slow_factor = self.base_slow_factor * width_scale / canvas_slowdown
-                y_slow_factor = (
-                    self.base_slow_factor * height_scale / 2 / canvas_slowdown
-                )
+                x_slow_factor = BASE_SLOW_FACTOR * width_scale / canvas_slowdown
+                y_slow_factor = BASE_SLOW_FACTOR * height_scale / 2 / canvas_slowdown
 
                 # Apply separate velocity smoothing for X and Y
-                if abs(dx) < self.velocity_threshold_x:
+                if abs(dx) < VELOCITY_THRESHOLD_X:
                     mouse_x = self.previous_mouse_pos[0] + dx * x_slow_factor
 
-                if abs(dy) < self.velocity_threshold_y:
+                if abs(dy) < VELOCITY_THRESHOLD_Y:
                     mouse_y = self.previous_mouse_pos[1] + dy * y_slow_factor
 
                 # Update position history
@@ -336,3 +353,35 @@ class WebcamFunctions:
 
         # Schedule UI update for next mainloop iteration
         self.after(100, update_ui)
+
+    def update_smoothing(self, value):
+        """Update smoothing window size"""
+        self.mouse_smoothing = int(value)
+        self.mouse_x_positions = collections.deque(maxlen=self.mouse_smoothing)
+        self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
+
+    def update_detection_confidence(self, value):
+        """Update hand detection confidence threshold"""
+        if hasattr(self, "hands"):
+            self.hands.close()
+        self.hands = self.mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=float(value),
+            min_tracking_confidence=self.tracking_slider.get(),
+        )
+
+    def update_tracking_confidence(self, value):
+        """Update hand tracking confidence threshold"""
+        if hasattr(self, "hands"):
+            self.hands.close()
+        self.hands = self.mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=self.detection_slider.get(),
+            min_tracking_confidence=float(value),
+        )
+
+    def toggle_mouse_control(self):
+        """Toggle mouse control on/off"""
+        self.mouse_control_enabled = self.mouse_control.get()
