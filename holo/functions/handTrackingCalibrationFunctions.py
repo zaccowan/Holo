@@ -6,6 +6,8 @@ import tkinter.ttk
 import math
 import cv2
 
+from config import DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH
+
 
 #################################
 # Hand Configuration
@@ -30,7 +32,7 @@ class HandTrackingCalibrationFunctions:
                     palm = results.multi_hand_landmarks[0].landmark[
                         self.mp_hands.HandLandmark.WRIST
                     ]
-                    x_pos = palm.x * self.frame_width
+                    x_pos = palm.x * DEFAULT_FRAME_WIDTH
                     self.left_bound_scroller.set(x_pos)
 
     def auto_configure_right_bound(self):
@@ -47,7 +49,7 @@ class HandTrackingCalibrationFunctions:
                     palm = results.multi_hand_landmarks[0].landmark[
                         self.mp_hands.HandLandmark.WRIST
                     ]
-                    x_pos = palm.x * self.frame_width
+                    x_pos = palm.x * DEFAULT_FRAME_WIDTH
                     self.right_bound_scroller.set(x_pos)
 
     def auto_configure_top_bound(self):
@@ -64,7 +66,7 @@ class HandTrackingCalibrationFunctions:
                     palm = results.multi_hand_landmarks[0].landmark[
                         self.mp_hands.HandLandmark.WRIST
                     ]
-                    y_pos = palm.y * self.frame_height
+                    y_pos = palm.y * DEFAULT_FRAME_HEIGHT
                     self.top_bound_scroller.set(y_pos)
 
     def auto_configure_bottom_bound(self):
@@ -81,7 +83,7 @@ class HandTrackingCalibrationFunctions:
                     palm = results.multi_hand_landmarks[0].landmark[
                         self.mp_hands.HandLandmark.WRIST
                     ]
-                    y_pos = palm.y * self.frame_height
+                    y_pos = palm.y * DEFAULT_FRAME_HEIGHT
                     self.bottom_bound_scroller.set(y_pos)
 
     def configure_depth(self):

@@ -11,6 +11,8 @@ import mediapipe as mp
 
 from config import (
     BASE_SLOW_FACTOR,
+    DEFAULT_FRAME_HEIGHT,
+    DEFAULT_FRAME_WIDTH,
     MIN_BOUND_SIZE,
     VELOCITY_THRESHOLD_X,
     VELOCITY_THRESHOLD_Y,
@@ -23,6 +25,8 @@ from config import (
 
 class WebcamFunctions:
     def __init__(self):
+        self.screen_width, self.screen_height = pyautogui.size()
+
         self.mp_hands = mp.solutions.hands
         self.mp_drawing = mp.solutions.drawing_utils
         self.mp_drawing_styles = mp.solutions.drawing_styles
@@ -34,6 +38,19 @@ class WebcamFunctions:
         self.mouse_smoothing = 5
         self.mouse_x_positions = collections.deque(maxlen=self.mouse_smoothing)
         self.mouse_y_positions = collections.deque(maxlen=self.mouse_smoothing)
+
+        self.camera_thread = None
+        self.camera_running = False
+        self.stop_event = threading.Event()
+
+        self.cap = None
+
+        self.hands = self.mp_hands.Hands(
+            static_image_mode=False,  # Already set correctly
+            max_num_hands=1,  # Already set correctly
+            min_detection_confidence=0.5,  # Lower this from 0.7
+            min_tracking_confidence=0.5,  # Lower this from 0.7
+        )
 
     def list_available_cameras(self):
         available_ports = []
@@ -51,8 +68,8 @@ class WebcamFunctions:
             self.close_camera()
         camera_index = int(selection.replace("Camera ", ""))
         self.cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, DEFAULT_FRAME_WIDTH)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, DEFAULT_FRAME_HEIGHT)
 
     def toggle_camera_flip(self):
         self.flip_camera_enabled = self.flip_camera.get()
@@ -65,8 +82,8 @@ class WebcamFunctions:
                 selected_camera = self.camera_select.get()
                 camera_index = int(selected_camera.replace("Camera ", ""))
                 self.cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, DEFAULT_FRAME_WIDTH)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, DEFAULT_FRAME_HEIGHT)
 
                 if not self.cap.isOpened():
                     print(f"Failed to open camera {camera_index}")
@@ -110,7 +127,7 @@ class WebcamFunctions:
                 # Scale back up for display
                 opencv_image = cv2.resize(
                     opencv_image,
-                    (self.frame_width, self.frame_height),
+                    (DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_HEIGHT),
                 )
             else:
                 # Just flip if needed without processing
@@ -166,12 +183,12 @@ class WebcamFunctions:
 
                 # Calculate raw mouse position
                 mouse_x = np.interp(
-                    palm_landmark.x * self.frame_width,
+                    palm_landmark.x * DEFAULT_FRAME_WIDTH,
                     [left_bound, right_bound],
                     [0, self.screen_width - 1],
                 )
                 mouse_y = np.interp(
-                    palm_landmark.y * self.frame_height,
+                    palm_landmark.y * DEFAULT_FRAME_HEIGHT,
                     [top_bound, bottom_bound],
                     [0, self.screen_height - 1],
                 )
@@ -302,9 +319,9 @@ class WebcamFunctions:
             label_height = self.webcam_image_label.winfo_height()
 
             # Ensure minimum dimensions
-            display_width = max(int(self.frame_width * 0.6), 800)
+            display_width = max(int(DEFAULT_FRAME_WIDTH * 0.6), 800)
             display_height = max(
-                int(self.frame_height * 0.6), 450
+                int(DEFAULT_FRAME_HEIGHT * 0.6), 450
             )  # Maintains 16:9 aspect ratio
 
             # Create scaled CTkImage

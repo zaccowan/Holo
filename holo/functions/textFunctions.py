@@ -2,6 +2,9 @@ import customtkinter
 
 
 class TextFunctions:
+    def __init__(self):
+        self.canvas_text = None
+
     def open_text_entry_window(self):
         # Import here to avoid circular dependency
         from GUI.TextEntry import TextEntryWindow

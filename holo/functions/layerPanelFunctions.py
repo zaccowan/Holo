@@ -1,4 +1,5 @@
 from tkinter import colorchooser
+from PIL import Image
 import customtkinter
 
 
@@ -18,6 +19,16 @@ class LayerPanelFunctions:
         }
         self.transform_active = False
         self.transform_tags = []
+
+        # Load icons
+        self.trash_icon = customtkinter.CTkImage(
+            light_image=Image.open("./assets/images/trash-icon-black.png"),
+            dark_image=Image.open("./assets/images/trash-icon-white.png"),
+        )
+        self.edit_icon = customtkinter.CTkImage(
+            light_image=Image.open("./assets/images/edit-icon-black.png"),
+            dark_image=Image.open("./assets/images/edit-icon-white.png"),
+        )
 
     def add_layer_to_panel(self, stroke_tag):
         layer_frame = customtkinter.CTkFrame(self.layer_container)

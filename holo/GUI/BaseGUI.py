@@ -22,12 +22,10 @@ class BaseGUI(customtkinter.CTk):
 
     def __init__(
         self,
-        # parent,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        # self = parent
         self.title("Holo")
         self.geometry(f"{DEFAULT_FRAME_WIDTH}x{DEFAULT_FRAME_HEIGHT}")
         # set a minmum size for the window
