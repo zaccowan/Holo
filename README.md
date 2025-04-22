@@ -2,17 +2,15 @@
 
 # What is Holo?
 
-Holo is my Computer Engineering capstone project at Bellarmine University. It involves to major components:
+Holo is my Computer Engineering capstone project at Bellarmine University. See the project absract below:
 <br>
 
-1. The Holo Canvas App
-   - Simple drawing features and modern GUI.
-   - Canvas to AI focus: You draw a simple picture, enter a simple prompt, or both, and generate and image onto the canvas.
-   - Ability to save canvas drawings.
-2. Device control using hand tracking.
-   - Mediapipe hand tracking allows user to stand infront of a projected display and control their system with just hand gestures (mouse movement, click, drags, keymacros)
-     <br>
-     The combination of the Holo Canvas App and Hand Tracking Gesture Control allows for an interactive canvas drawing experience on a projected display backed by AI image generation.
+Project Holo is a multimodal artificial intelligence (AI) system that integrates multiple AI technologies into a dynamic, hand-gesture-controlled canvas painting and image generation application. With the increasing integration of AI in consumer applications, Holo provides users with an intuitive and interactive platform for AI-driven image creation. 
+
+Holo is written in python but can be compiled down to C code for slightly increased performance. The graphical user interface (GUI) utilizes a library called “tkinter” with a custom theme wrapper called “custom tkinter.” Holo users can create a sketch using drawing tools such as a pen brush, fill tool, transform, and rectangle tool, and/or enter a text-based image generation prompt. Upon initiating the "Generate AI Image" function, Holo processes the provided inputs via an API call, using a variety of selectable AI models which convert the sketch and/or prompt into an image that appears in the designated output tab.
+
+Holo supports standard interaction methods, including keyboard, mouse, and tablet pen input. Additionally, it enhances user engagement by incorporating a projector-interface and in-app hand tracking using MediaPipe – a Google solution suite enabling hand tracking and pose estimation in real time video feeds.  The local hand position of a user in frame, derived from the MediaPipe hand solution, is mapped to screen space to control the on-screen cursor, while gesture-based controls — such as pinching the index finger and thumb to emulate a mouse press — enable a seamless, touch-free interaction experience. This innovative approach makes Holo a versatile tool for AI-assisted digital art creation, expanding the possibilities of human-computer interaction in creative applications.
+
 
 # When could Holo be used?
 
