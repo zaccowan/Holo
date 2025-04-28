@@ -1,8 +1,24 @@
-customtkinter
-Pillow
-numpy
-opencv-python
-pyautogui
-mediapipe
-vosk
-pyaudio
+# Core GUI and interface
+customtkinter>=5.2.0
+Pillow>=10.0.0
+python-dotenv>=1.0.0
+pywinstyles>=1.0.0
+
+# Computer vision and image processing
+opencv-python>=4.8.0
+numpy>=1.24.0
+mediapipe>=0.10.0
+
+# Mouse and system control
+pyautogui>=0.9.54
+
+# Speech recognition
+vosk>=0.3.45
+pyaudio>=0.2.13
+
+# AI image generation
+replicate>=0.13.0
+
+# Additional utilities
+requests>=2.31.0
+matplotlib>=3.7.2
