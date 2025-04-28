@@ -12,69 +12,29 @@ Holo is written in python but can be compiled down to C code for slightly increa
 Holo supports standard interaction methods, including keyboard, mouse, and tablet pen input. Additionally, it enhances user engagement by incorporating a projector-interface and in-app hand tracking using MediaPipe – a Google solution suite enabling hand tracking and pose estimation in real time video feeds.  The local hand position of a user in frame, derived from the MediaPipe hand solution, is mapped to screen space to control the on-screen cursor, while gesture-based controls — such as pinching the index finger and thumb to emulate a mouse press — enable a seamless, touch-free interaction experience. This innovative approach makes Holo a versatile tool for AI-assisted digital art creation, expanding the possibilities of human-computer interaction in creative applications.
 
 
-# When could Holo be used?
+# Download the Report, Poster, or Abstract Below
 
-- In a teaching setting: a modern whiteboard with on the fly AI sketck-to-image genration.
-- In a creative brainstorming session: trying to get a storyboard developed for a project.
-- In a business setting: outlining project demands and system specifications
-- Or... Just for fun!
 
-# Holo Canvas Feature Section
+[Report](https://github.com/zaccowan/Holo/blob/main/Holo%20Project%20Report.pdf)
 
-- [x] Holo GUI Outlined
-- [x] Selectable Pen Colors
-- [x] Selectable Brush Size
-- [x] Line, rectangle, circle, paint bucket tool.
-- [ ] Canvas Layers
-- [x] Canvas Element Transform
-- [ ] Holo Canvas Makes API Call to AI Image Generaion Model (using external computing resources)
-- [ ] Save and open canvas files
-- [ ] Change canvas dimensions
 
-# Gesture Control Feature Section
+[Poster](https://github.com/zaccowan/Holo/blob/main/Holo%20Poster%20Presentation.pdf)
 
-- [x] Pinch to click
-- [x] Camera bounds setting (to map local enviroinment space to screen space)
-- [ ] Macro based on gestures
-- [ ] Clean handling when hand track is lost (behind user or out of frame)
 
-# Technical Tidbits
+[Abstract](https://github.com/zaccowan/Holo/blob/main/Holo%20Abstract.pdf)
 
-- Tkinter based GUI (custom tkinter for themeing)
-- Mediapipe hand tracking for gesture control
 
-# Holo Canvas App Dependencies
 
-- Tkinter
-  ```
-  pip install tk
-  ```
-- Custom Tkinter
-  ```
-  pip install customtkinter --upgrade
-  ```
-- Pillow
-  ```
-  pip install pillow
-  ```
+# Running Holo
 
-# Compiling to Standalone exe with nuitka
-
-```
-python -m nuitka --windows-console-mode=disable --standalone holo.py
-```
-
-# Gesture Control Dependencies
-
-- OpenCV
-- Mediapipe
-- Numpy
--
-
-<br>
-<br>
-
-## Other Directions Holo Could Be Taken
-
-- Hand tracking and AI based image-to-mesh reconstruction to skin a 3D model using bone points as tracked by Mediapipe
--
+1. Clone the project to your machine.
+2. Run the following in a terminal from the root directory of the repository:
+   Install Dependencies
+   ```
+   pip install -r requirements.txt
+   ```
+   Navigate to the holo application director and run the holo entry point - holo.py.
+   ```
+   cd holo
+   python holo.py
+   ```
