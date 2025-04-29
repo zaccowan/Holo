@@ -9,3 +9,5 @@ nuitka-crash-report.xml
 
 *.pdb
 *.pyc
+
+.venv
