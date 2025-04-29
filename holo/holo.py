@@ -34,6 +34,12 @@ ctypes.windll.shcore.SetProcessDpiAwareness(1)
 customtkinter.set_appearance_mode(DEFAULT_APPEARANCE_MODE)
 customtkinter.set_default_color_theme(DEFAULT_COLOR_THEME)
 
+"""
+holo.py - is the main entry point for the Holo application.
+It initializes the application by loading environment variables, setting up the GUI, and importing necessary modules and functions.
+It also sets the default appearance mode and color theme for the application.
+"""
+
 
 class Holo(
     CanvasMouseFunctions,
