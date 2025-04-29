@@ -23,6 +23,8 @@ Holo supports standard interaction methods, including keyboard, mouse, and table
 
 [Abstract](https://github.com/zaccowan/Holo/blob/main/Holo%20Abstract.pdf)
 
+[Quick Video Presentation](https://video.bellarmine.edu/media/Holo+Video+Presentation/1_d3lplo8q)
+
 
 
 # Running Holo
