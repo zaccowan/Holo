@@ -8,6 +8,12 @@ import math
 # Canvas Drawing Events
 ################################
 
+"""
+canvasMouseFunctions.py - Handles all mouse interactions with the canvas.
+Processes mouse events (clicks, drags, releases) to draw shapes, handle selections,
+transform objects, and manage the active tools. Core drawing functionality implementation.
+"""
+
 
 class CanvasMouseFunctions:
     def __init__(self):

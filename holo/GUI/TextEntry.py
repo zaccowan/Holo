@@ -6,6 +6,12 @@ import customtkinter
 import pyaudio
 import vosk
 
+"""
+TextEntry.py - Creates a popup window for text entry with both keyboard and speech input.
+Provides an interface for typing text or using speech recognition to add text
+to the canvas. Includes speech recognition controls and text submission.
+"""
+
 
 class TextEntryWindow(customtkinter.CTkToplevel):
 

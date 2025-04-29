@@ -13,6 +13,12 @@ from config import DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH
 # Hand Configuration
 #################################
 
+"""
+handTrackingCalibrationFunctions.py - Manages hand tracking calibration for webcam input.
+Provides functions to configure hand tracking boundaries and depth sensing,
+allowing users to use hand gestures as input by calibrating to their environment.
+"""
+
 
 class HandTrackingCalibrationFunctions:
     def __init__(self):

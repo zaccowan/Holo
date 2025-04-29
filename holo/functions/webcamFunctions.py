@@ -22,6 +22,12 @@ from config import (
 # Webcam Functions
 ################################
 
+"""
+webcamFunctions.py - Handles webcam capture and hand tracking for gesture control.
+Manages camera initialization, processing video frames, detecting hand positions,
+and translating hand movements to mouse actions for controlling the application.
+"""
+
 
 class WebcamFunctions:
     def __init__(self):

@@ -2,6 +2,12 @@ import customtkinter
 
 from config import DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH
 
+"""
+WebcamGUI.py - Manages the webcam interface tab for hand tracking input.
+Sets up camera selection, webcam feed display, hand tracking controls,
+and bounding box configuration for using hand gestures to control the application.
+"""
+
 
 class WebcamGUI:
     def __init__(self):

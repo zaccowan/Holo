@@ -7,7 +7,12 @@ import cv2
 
 from config import ASPECT_RATIO, MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH
 
-# General Imports
+
+"""
+windowHelperFunctions.py - Provides window management utilities.
+Handles window appearance styles, scaling, fullscreen toggling, and
+other window-related operations across the application.
+"""
 
 
 class WindowHelperFunctions:

@@ -7,6 +7,12 @@ import customtkinter
 # Layer Window
 ################################
 
+"""
+layerPanelFunctions.py - Handles the layer management interface and operations.
+Manages adding, selecting, deleting, and editing layers in the layer panel.
+Controls layer properties like color, text attributes, and selection state.
+"""
+
 
 class LayerPanelFunctions:
     def __init__(self):

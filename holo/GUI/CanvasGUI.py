@@ -1,6 +1,12 @@
 import tkinter
 import customtkinter
 
+"""
+CanvasGUI.py - Handles the Canvas tab interface where drawing takes place.
+Creates and configures the drawing canvas, transform controls for manipulating elements,
+and buttons for saving/generating images. Sets up canvas event bindings.
+"""
+
 
 class CanvasGUI:
     def __init__(self):

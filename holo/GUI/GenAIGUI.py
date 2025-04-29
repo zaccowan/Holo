@@ -3,6 +3,12 @@ import customtkinter
 
 from config import AI_MODELS, DEFAULT_AI_MODEL
 
+"""
+GenAIGUI.py - Manages the AI image generation tab interface.
+Sets up the model selection dropdown, result display area, and controls 
+for generating AI images from canvas drawings and copying them back to canvas.
+"""
+
 
 class GenAIGUI:
     def __init__(self):

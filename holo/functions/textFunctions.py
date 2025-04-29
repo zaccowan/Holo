@@ -1,5 +1,11 @@
 import customtkinter
 
+"""
+textFunctions.py - Manages text-related functionality for the canvas.
+Handles opening the text entry window and placing text elements on the canvas.
+Works with the TextEntry component to add user-supplied text to drawings.
+"""
+
 
 class TextFunctions:
     def __init__(self):

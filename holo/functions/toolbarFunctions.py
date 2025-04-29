@@ -11,6 +11,12 @@ from config import (
 # Toolbar Functions
 ################################
 
+"""
+toolbarFunctions.py - Manages drawing tool functionality and element properties.
+Handles tool selection, color picking, element sizing, and transform operations.
+Controls the behavior of different drawing tools and object transformations.
+"""
+
 
 class ToolbarFunctions:
     def __init__(self):

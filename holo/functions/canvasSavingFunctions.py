@@ -28,6 +28,12 @@ import replicate
 # Canvas Drawing Events
 ################################
 
+"""
+canvasSavingFunctions.py - Manages saving canvas content and AI image generation.
+Handles exporting canvas drawings to files, generating AI images from drawings
+using external APIs, and copying AI-generated images to the canvas.
+"""
+
 
 class CanvasSavingFunctions:
     def __init__(self):

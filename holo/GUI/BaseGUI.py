@@ -17,6 +17,12 @@ from config import (
     DEFAULT_FRAME_HEIGHT,
 )
 
+"""
+BaseGUI.py - Defines the main application window class that handles the base UI layout.
+Creates the sidebar with tool selection, the main content area, and sets up the tab structure.
+Controls appearance settings, scaling, and the basic UI framework for the entire application.
+"""
+
 
 class BaseGUI(customtkinter.CTk):
 
