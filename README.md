@@ -29,10 +29,14 @@ Holo supports standard interaction methods, including keyboard, mouse, and table
 
 1. Clone the project to your machine.
 2. Run the following in a terminal from the root directory of the repository:
-   Install Dependencies
+   
+   Setup Environment and Install Dependencies
    ```
+   python -m venv .venv
+   .venv\Scripts\activate
    pip install -r requirements.txt
    ```
+   
    Navigate to the holo application director and run the holo entry point - holo.py.
    ```
    cd holo
